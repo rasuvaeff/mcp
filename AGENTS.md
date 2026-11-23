@@ -448,6 +448,14 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   `persist-credentials: false` on every checkout. Never revert to floating
   tags; verify with `zizmor --persona=auditor .github/`.
 
+## Documentation site
+
+`docs/` is the VitePress site of the whole family (this package, `mcp-openapi`,
+`yii3-mcp` and its bridges), published by `.github/workflows/docs.yml`. Change the
+page in the same PR as the behaviour. `docs/api/classes` and `docs/llms.md` are
+generated: `bash docs/scripts/reflect.sh`, then `npm run docs:build` in `docs/`
+(it checks links, anchors and that every `@api` class has a page).
+
 ## When you finish
 
 - Update `README.md` **and `README.ru.md`** (both languages, same commit; and

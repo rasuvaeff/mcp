@@ -22,7 +22,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * templates, prompts) without an MCP client: the introspection goes through
  * the same in-process JSON-RPC path a real client uses, so the output shows
  * what is actually served — attribute tools, OpenAPI-bridged operations and
- * Markdown prompts alike.
+ * configurator-registered prompts alike.
  *
  * `--json` prints the full capability definitions as normalized JSON (the
  * SchemaSnapshot format: sections keyed, items ordered by identity, object

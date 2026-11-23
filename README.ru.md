@@ -17,6 +17,8 @@ OAuth; работает через PSR-15 или stdio. Для Yii3 ставьт
 [`rasuvaeff/yii3-mcp`](https://github.com/rasuvaeff/yii3-mcp): он подключает этот
 пакет сам.
 
+**[Документация](https://rasuvaeff.github.io/mcp/)** — руководство, интеграция с Yii3, bridges, cookbook и API-справочник (на английском).
+
 > **Пользуетесь AI coding assistant?** [llms.txt](llms.txt) содержит компактную
 > API-справку для модели. Для контрибьюторов: [AGENTS.md](AGENTS.md).
 > Проекты с Composer-плагином [llm/skills](https://github.com/roxblnfk/skills)

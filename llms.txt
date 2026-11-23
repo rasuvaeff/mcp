@@ -28,6 +28,7 @@ composer require rasuvaeff/mcp
   `Identity\ExecutionIdentityProviderInterface` (on whose behalf a call runs),
   `Identity\SecretResolverInterface`, `Identity\StaticSecretResolver`,
   `Session\PrivateFileSessionStore`, `Exception\SessionOwnershipException`,
+  `ServerConfiguratorInterface` (`configure(Builder)`: contribute capabilities),
   `ReservedToolNamesAwareInterface`.
 
 ## API reference
