@@ -403,7 +403,10 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   only, never persisted) and to the request-state binder. The claim value is an
   OBJECT so no JWT can forge it. `ClientBoundRequestStateBinder` must give the
   inner binder the ORIGINAL token: a token without a subject makes the SDK bind
-  to a random value and no state would ever verify. The session owner still
+  to a random value and no state would ever verify.
+  `InterceptingReferenceHandler` puts the original token back into the session
+  before interceptors or the handler run and is therefore ALWAYS installed:
+  `getAccessToken()` must stay `null` without OAuth. The session owner still
   wins; a disagreement fails closed. `InterleavedIdentityTest` is the guard.
 - **OAuth: a token never becomes an anonymous request.**
   `OAuth\BearerTokenMiddleware` puts the SDK's `AuthorizationMiddleware` first

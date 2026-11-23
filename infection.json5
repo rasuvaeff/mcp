@@ -24,8 +24,6 @@
     //      an ASCII lead byte, where both comparisons are always true.
     //    - McpServerFactory.php PlusEqual: every term is >= 0 and only
     //      `=== 0` is read.
-    //    - McpServerFactory.php LogicalOrAllSubExprNegation: a pass-through
-    //      reference handler with nothing configured behaves as no handler.
     //    - McpListCommand.php ReturnRemoval (arguments()): a non-array schema
     //      renders '' with or without the early return.
     //    - ToolResultTextFormatter.php ReturnRemoval: the general path ends in

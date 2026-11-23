@@ -330,7 +330,15 @@ final readonly class InterceptingReferenceHandler implements ReferenceHandlerInt
 
         /** @var mixed $token */
         $token = $session->get(AccessToken::class);
-        $clientId = RequestIdentity::clientId($token instanceof AccessToken ? $token : null);
+        $token = $token instanceof AccessToken ? $token : null;
+        $clientId = RequestIdentity::clientId($token);
+
+        // the carrier has done its job: from here on interceptors, visibility
+        // and the handler see the token the request really arrived with, so
+        // "has a token" keeps meaning OAuth
+        if ($clientId !== null) {
+            $session->set(AccessToken::class, RequestIdentity::originalToken($token));
+        }
 
         /** @var mixed $stored */
         $stored = $session->get(self::CLIENT_ID_SESSION_KEY);

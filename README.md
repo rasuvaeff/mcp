@@ -154,9 +154,7 @@ SchemaSnapshot::verify($tester, __DIR__ . '/mcp-schema.json');
 No class keeps mutable static state. The client id travels with the request (as
 the SDK's per-request `AccessToken`), so interleaved requests of one process
 (Fibers, Swoole coroutines) keep their own identity; this is covered by a test on
-bare Fibers. Consequence: behind `SharedSecretMiddleware`
-`RequestContext::getAccessToken()` is not `null` but a token with no scopes and no
-subject. Check scopes or the subject, never mere presence.
+bare Fibers.
 
 ## Security
 

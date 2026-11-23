@@ -155,9 +155,7 @@ SchemaSnapshot::verify($tester, __DIR__ . '/mcp-schema.json');
 Ни один класс не хранит изменяемое static-состояние. Client id едет вместе с
 запросом (в `AccessToken` SDK, живущем один запрос), поэтому чередующиеся запросы
 одного процесса (Fibers, корутины Swoole) сохраняют свою идентичность; это покрыто
-тестом на голых Fibers. Следствие: за `SharedSecretMiddleware`
-`RequestContext::getAccessToken()` возвращает не `null`, а токен без scopes и
-subject. Проверяйте scopes или subject, а не само наличие токена.
+тестом на голых Fibers.
 
 ## Безопасность
 

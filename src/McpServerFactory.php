@@ -269,25 +269,23 @@ final readonly class McpServerFactory
             ));
         }
 
-        $referenceHandler = null;
-
-        if ($interceptorList !== [] || $promptInterceptorList !== [] || $resourceInterceptorList !== [] || $anyVisibility || !$this->compactToolResults || $resultDecoratorList !== []) {
-            // the decorator wraps EVERY registration path: [class, method]
-            // references, closures and explicit handler objects all execute
-            // through the reference handler
-            $referenceHandler = new InterceptingReferenceHandler(
-                inner: new ReferenceHandler($this->container),
-                interceptors: $interceptorList,
-                visibility: $toolVisibility,
-                promptInterceptors: $promptInterceptorList,
-                resourceInterceptors: $resourceInterceptorList,
-                promptVisibility: $promptVisibility,
-                resourceVisibility: $resourceVisibility,
-                compactToolResults: $this->compactToolResults,
-                resultDecorators: $resultDecoratorList,
-            );
-            $builder->setReferenceHandler($referenceHandler);
-        }
+        // always installed: besides the chains below it takes the client id off
+        // the request's carrier token before any handler can see that token
+        // the decorator wraps EVERY registration path: [class, method]
+        // references, closures and explicit handler objects all execute
+        // through the reference handler
+        $referenceHandler = new InterceptingReferenceHandler(
+            inner: new ReferenceHandler($this->container),
+            interceptors: $interceptorList,
+            visibility: $toolVisibility,
+            promptInterceptors: $promptInterceptorList,
+            resourceInterceptors: $resourceInterceptorList,
+            promptVisibility: $promptVisibility,
+            resourceVisibility: $resourceVisibility,
+            compactToolResults: $this->compactToolResults,
+            resultDecorators: $resultDecoratorList,
+        );
+        $builder->setReferenceHandler($referenceHandler);
 
         // every server gets its own registry wrapped in the duplicate guard:
         // the SDK registry is last-write-wins, so a name collision between ANY
@@ -309,18 +307,15 @@ final readonly class McpServerFactory
                     pageSize: $this->paginationLimit,
                 );
                 $builder->addRequestHandler($listHandler);
-
                 // a hidden tool must answer exactly like a missing one,
                 // before the SDK validates arguments against its schema
-                if ($referenceHandler instanceof InterceptingReferenceHandler) {
-                    /** @var RequestHandlerInterface<mixed> $callHandler */
-                    $callHandler = new FilteredCallToolHandler(
-                        registry: $registry,
-                        inner: new CallToolHandler($registry, $referenceHandler, $this->logger ?? new NullLogger()),
-                        visibility: $toolVisibility,
-                    );
-                    $builder->addRequestHandler($callHandler);
-                }
+                /** @var RequestHandlerInterface<mixed> $callHandler */
+                $callHandler = new FilteredCallToolHandler(
+                    registry: $registry,
+                    inner: new CallToolHandler($registry, $referenceHandler, $this->logger ?? new NullLogger()),
+                    visibility: $toolVisibility,
+                );
+                $builder->addRequestHandler($callHandler);
             }
 
             if ($promptVisibility instanceof PromptVisibilityInterface) {
