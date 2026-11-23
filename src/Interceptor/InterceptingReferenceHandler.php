@@ -8,6 +8,7 @@ use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Schema\JsonRpc\Request;
 use Mcp\Schema\Result\CallToolResult;
 use Mcp\Schema\Result\InputRequiredResult;
+use Mcp\Server\Authorization\AccessToken;
 use Mcp\Server\Capability\Registry\ElementReference;
 use Mcp\Server\Capability\Registry\PromptReference;
 use Mcp\Server\Capability\Registry\ReferenceHandlerInterface;
@@ -20,7 +21,7 @@ use Mcp\Server\Exception\ToolCallException;
 use Mcp\Server\RequestContext;
 use Mcp\Server\Session\SessionInterface;
 use Rasuvaeff\Mcp\Exception\SessionOwnershipException;
-use Rasuvaeff\Mcp\Identity\ClientIdentityContext;
+use Rasuvaeff\Mcp\Identity\RequestIdentity;
 use Rasuvaeff\Mcp\ToolResultTextFormatter;
 use Rasuvaeff\Mcp\Visibility\PromptVisibilityInterface;
 use Rasuvaeff\Mcp\Visibility\ResourceVisibilityInterface;
@@ -46,7 +47,7 @@ use Rasuvaeff\Mcp\Visibility\ToolVisibilityInterface;
  * {@see \Rasuvaeff\Mcp\McpAction} stamps at `initialize`), so it travels
  * with the request instead of through process state and stays correct even in
  * a concurrent (Fiber-interleaving) runtime. The process-local
- * {@see ClientIdentityContext} is only the fallback for sessions that carry
+ * {@see RequestIdentity} is only the fallback for sessions that carry
  * no owner yet (a pre-ownership session, an embedding without McpAction) —
  * in that case the id is mirrored into the session on first use. When both
  * are present and DISAGREE, the call fails closed with
@@ -315,20 +316,21 @@ final readonly class InterceptingReferenceHandler implements ReferenceHandlerInt
     }
 
     /**
-     * The session's immutable owner wins; the process-local
-     * {@see ClientIdentityContext} (armed per request by McpAction — the SDK
-     * hands this handler the JSON-RPC request, not the PSR-7 one) covers
-     * sessions with no recorded owner and sessionless calls, and its id is
-     * mirrored into the session on first use. An owner that DISAGREES with
-     * the current request's id fails closed: a session is never re-attributed.
+     * The session's immutable owner wins; the client id the request itself
+     * carries ({@see RequestIdentity}) covers sessions with no recorded owner —
+     * always so on the stateless era — and is mirrored into the session on
+     * first use. An owner that DISAGREES with the current request's id fails
+     * closed: a session is never re-attributed.
      */
     private function clientId(?SessionInterface $session): ?string
     {
-        $clientId = ClientIdentityContext::current();
-
         if (!$session instanceof SessionInterface) {
-            return $clientId;
+            return null;
         }
+
+        /** @var mixed $token */
+        $token = $session->get(AccessToken::class);
+        $clientId = RequestIdentity::clientId($token instanceof AccessToken ? $token : null);
 
         /** @var mixed $stored */
         $stored = $session->get(self::CLIENT_ID_SESSION_KEY);

@@ -8,14 +8,18 @@ use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Schema\Result\CallToolResult;
 use Mcp\Schema\Result\InputRequiredResult;
 use Mcp\Schema\Tool;
+use Mcp\Server\Authorization\AccessToken;
 use Mcp\Server\Capability\Registry\ElementReference;
 use Mcp\Server\Capability\Registry\ReferenceHandlerInterface;
 use Mcp\Server\Capability\Registry\ToolReference;
 use Mcp\Server\Exception\ToolCallException;
 use Mcp\Server\Server;
 use Mcp\Server\Session\InMemorySessionStore;
+use Mcp\Server\Session\SessionInterface;
 use Nyholm\Psr7\Factory\Psr17Factory;
-use Rasuvaeff\Mcp\Identity\ClientIdentityContext;
+use Nyholm\Psr7\ServerRequest;
+use Rasuvaeff\Mcp\Exception\SessionOwnershipException;
+use Rasuvaeff\Mcp\Identity\RequestIdentity;
 use Rasuvaeff\Mcp\Interceptor\InterceptingReferenceHandler;
 use Rasuvaeff\Mcp\Interceptor\ToolCallInterceptorInterface;
 use Rasuvaeff\Mcp\McpServerFactory;
@@ -134,75 +138,57 @@ final class InterceptingReferenceHandlerTest
         Assert::same($context->clientInfo()?->name, 'mcp-tester');
     }
 
-    public function armedClientIdentityReachesTheContextAndSession(): void
+    public function theRequestClientIdReachesTheContext(): void
     {
         $recording = new RecordingInterceptor();
-        $tester = $this->tester([$recording]);
 
-        ClientIdentityContext::arm('claude');
-
-        try {
-            $tester->callTool('greet', ['name' => 'Yii']);
-        } finally {
-            ClientIdentityContext::disarm();
-        }
+        $this->tester([$recording], clientId: 'claude')->callTool('greet', ['name' => 'Yii']);
 
         Assert::same($recording->lastContext?->clientId, 'claude');
     }
 
-    public function sessionKeepsTheClientIdWhenTheHolderIsDisarmed(): void
+    public function theFirstClientIdIsMirroredIntoTheSessionAndOutlivesTheToken(): void
     {
         $recording = new RecordingInterceptor();
-        $tester = $this->tester([$recording]);
+        $session = new FakeSession([AccessToken::class => $this->token('claude')]);
 
-        ClientIdentityContext::arm('claude');
-
-        try {
-            $tester->callTool('greet', ['name' => 'Yii']);
-        } finally {
-            ClientIdentityContext::disarm();
-        }
-
-        // A later request in the SAME session without an armed holder (e.g.
-        // stdio or a misordered middleware stack) still resolves via the
-        // session mirror.
-        $tester->callTool('greet', ['name' => 'Again']);
+        $this->callIn($session, $recording);
+        // a later request of the SAME session carrying no client id (a
+        // misordered middleware stack) still resolves via the session mirror
+        $session->set(AccessToken::class, null);
+        $this->callIn($session, $recording);
 
         Assert::same($recording->lastContext?->clientId, 'claude');
+        Assert::same($session->get(InterceptingReferenceHandler::CLIENT_ID_SESSION_KEY), 'claude');
     }
 
-    public function sessionOwnerRefusesAConflictingArmedIdentity(): void
+    public function sessionOwnerRefusesAConflictingRequestIdentity(): void
     {
         $recording = new RecordingInterceptor();
-        $tester = $this->tester([$recording]);
-
-        ClientIdentityContext::arm('claude');
-
-        try {
-            $tester->callTool('greet', ['name' => 'Yii']);
-        } finally {
-            ClientIdentityContext::disarm();
-        }
-
-        // Fiber-interleaving regression: request B's identity lands in the
-        // process-local slot while session A's call executes. The session's
-        // immutable owner wins and the call fails closed instead of being
-        // silently re-attributed to B.
-        ClientIdentityContext::arm('mallory');
-        $failedClosed = false;
+        $session = new FakeSession([
+            InterceptingReferenceHandler::CLIENT_ID_SESSION_KEY => 'claude',
+            AccessToken::class => $this->token('mallory'),
+        ]);
+        $caught = null;
 
         try {
-            $result = $tester->callTool('greet', ['name' => 'Yii']);
-            $failedClosed = ($result['isError'] ?? false) === true;
-        } catch (\Throwable) {
-            $failedClosed = true;
-        } finally {
-            ClientIdentityContext::disarm();
+            $this->callIn($session, $recording);
+        } catch (SessionOwnershipException $caught) {
         }
 
-        Assert::true($failedClosed);
+        Assert::notNull($caught);
         // the interceptor chain never observed the conflicting identity
-        Assert::same($recording->lastContext?->clientId, 'claude');
+        Assert::null($recording->lastContext);
+    }
+
+    public function aCallOutsideASessionHasNoClientId(): void
+    {
+        $recording = new RecordingInterceptor();
+
+        $this->callIn(null, $recording);
+
+        Assert::notNull($recording->lastContext);
+        Assert::null($recording->lastContext->clientId);
     }
 
     public function withoutIdentityTheContextClientIdIsNull(): void
@@ -212,6 +198,32 @@ final class InterceptingReferenceHandlerTest
         $this->tester([$recording])->callTool('greet', ['name' => 'Yii']);
 
         Assert::null($recording->lastContext?->clientId);
+    }
+
+    private function token(string $clientId): AccessToken
+    {
+        return RequestIdentity::attach(new ServerRequest('POST', '/mcp'), $clientId)->getAttribute(AccessToken::class);
+    }
+
+    private function callIn(?SessionInterface $session, RecordingInterceptor $recording): void
+    {
+        $handler = new InterceptingReferenceHandler(
+            inner: new class implements ReferenceHandlerInterface {
+                #[\Override]
+                public function handle(ElementReference $reference, array $arguments): mixed
+                {
+                    return 'ran';
+                }
+            },
+            interceptors: [$recording],
+        );
+        $handler->handle(
+            new ToolReference(
+                new Tool(name: 'ids', title: null, inputSchema: ['type' => 'object', 'properties' => new \stdClass()], description: null, annotations: null),
+                static fn(): string => 'ran',
+            ),
+            $session instanceof SessionInterface ? ['_session' => $session] : [],
+        );
     }
 
     public function promptsAndResourcesBypassTheChain(): void
@@ -429,7 +441,7 @@ final class InterceptingReferenceHandlerTest
     /**
      * @param list<ToolCallInterceptorInterface> $interceptors
      */
-    private function tester(array $interceptors, ?ToolVisibilityInterface $visibility = null): McpTester
+    private function tester(array $interceptors, ?ToolVisibilityInterface $visibility = null, ?string $clientId = null): McpTester
     {
         $factory = new Psr17Factory();
 
@@ -438,6 +450,7 @@ final class InterceptingReferenceHandlerTest
             requestFactory: $factory,
             responseFactory: $factory,
             streamFactory: $factory,
+            clientId: $clientId,
         );
     }
 

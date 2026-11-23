@@ -10,13 +10,11 @@ use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
 use Psr\Http\Message\ResponseInterface;
 use Rasuvaeff\Mcp\Exception\SessionOwnershipException;
-use Rasuvaeff\Mcp\Identity\ClientIdentityContext;
 use Rasuvaeff\Mcp\McpAction;
 use Rasuvaeff\Mcp\McpServerFactory;
 use Rasuvaeff\Mcp\SharedSecretMiddleware;
 use Rasuvaeff\Mcp\Tests\Support\CountingTool;
 use Rasuvaeff\Mcp\Tests\Support\ScriptedSessionStore;
-use Rasuvaeff\Mcp\Tests\Support\StubStream;
 use Rasuvaeff\Mcp\Tests\Support\WarningsAsErrors;
 use Symfony\Component\Uid\Uuid;
 use Testo\Assert;
@@ -34,7 +32,6 @@ use Yiisoft\Test\Support\Container\SimpleContainer;
  */
 #[Test]
 #[Covers(McpAction::class)]
-#[Covers(ClientIdentityContext::class)]
 #[Covers(SessionOwnershipException::class)]
 final class SessionOwnershipTest
 {
@@ -135,28 +132,6 @@ final class SessionOwnershipTest
 
         Assert::same($response->getStatusCode(), 404);
         Assert::same($this->tool->calls, 0);
-    }
-
-    public function identityHolderIsDisarmedEvenWhenTheTransportThrows(): void
-    {
-        $request = (new ServerRequest(
-            method: 'POST',
-            uri: 'http://localhost/mcp',
-            headers: ['Content-Type' => 'application/json', 'Accept' => 'application/json, text/event-stream'],
-            body: new StubStream(content: 'x', throwOnRead: true),
-        ))->withAttribute(SharedSecretMiddleware::CLIENT_ID_ATTRIBUTE, 'client-a');
-
-        $caught = null;
-
-        try {
-            $this->action->handle($request);
-        } catch (\LogicException $caught) {
-        }
-
-        Assert::notNull($caught);
-        // the finally bracket must hold: an exploding request never leaks
-        // its identity into the process slot for the next request
-        Assert::null(ClientIdentityContext::current());
     }
 
     public function ownerKeepsUsingItsOwnSession(): void

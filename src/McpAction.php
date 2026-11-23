@@ -14,7 +14,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Http\Server\RequestHandlerInterface;
-use Rasuvaeff\Mcp\Identity\ClientIdentityContext;
+use Rasuvaeff\Mcp\Identity\RequestIdentity;
 use Rasuvaeff\Mcp\Interceptor\InterceptingReferenceHandler;
 use Symfony\Component\Uid\Uuid;
 
@@ -79,13 +79,7 @@ final readonly class McpAction implements RequestHandlerInterface
             return $this->sessionNotFound();
         }
 
-        // The SDK hands its reference handler the JSON-RPC request, not this
-        // PSR-7 one, so the client id resolved by SharedSecretMiddleware is
-        // carried through a process-local holder for the duration of the run.
-        // After the owner is stamped at initialize, capability calls read the
-        // identity from the session itself; the holder covers the remaining
-        // sessionless/unstamped paths.
-        ClientIdentityContext::arm($clientId);
+        $request = RequestIdentity::attach($request, $clientId);
 
         // the SDK (0.10) binds a handshake-era session to the principal that
         // opened it and answers 404 to any other: the resolved client id IS
@@ -95,16 +89,12 @@ final readonly class McpAction implements RequestHandlerInterface
             $request = $request->withAttribute(StreamableHttpTransport::PRINCIPAL_ATTRIBUTE, $clientId);
         }
 
-        try {
-            $response = $this->server->run(new StreamableHttpTransport(
-                request: $request,
-                responseFactory: $this->responseFactory,
-                streamFactory: $this->streamFactory,
-                middleware: $this->allowedHosts === [] ? null : $this->transportMiddleware(),
-            ));
-        } finally {
-            ClientIdentityContext::disarm();
-        }
+        $response = $this->server->run(new StreamableHttpTransport(
+            request: $request,
+            responseFactory: $this->responseFactory,
+            streamFactory: $this->streamFactory,
+            middleware: $this->allowedHosts === [] ? null : $this->transportMiddleware(),
+        ));
 
         // initialize created a new session (no session id on the request, one
         // on the response): stamp the immutable owner NOW, not on first

@@ -151,12 +151,12 @@ SchemaSnapshot::verify($tester, __DIR__ . '/mcp-schema.json');
 
 ### Long-running workers
 
-Under PHP-FPM and one-request-at-a-time workers client identity is reset after
-every request. With interleaved requests in one process (Swoole coroutines,
-Fibers) the fallback identity of a call **without** a session owner is kept in a
-process-wide slot and may belong to another request; calls in an owned session
-are not affected. On the stateless era there is no session owner, so do not rely
-on client identity there in such runtimes.
+No class keeps mutable static state. The client id travels with the request (as
+the SDK's per-request `AccessToken`), so interleaved requests of one process
+(Fibers, Swoole coroutines) keep their own identity; this is covered by a test on
+bare Fibers. Consequence: behind `SharedSecretMiddleware`
+`RequestContext::getAccessToken()` is not `null` but a token with no scopes and no
+subject. Check scopes or the subject, never mere presence.
 
 ## Security
 

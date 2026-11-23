@@ -397,23 +397,14 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   plugin (set to `false` in `allow-plugins` — we pass PSR-17 factories
   explicitly everywhere, no runtime discovery on our paths). CI extensions
   include `fileinfo` in every job.
-- **`Identity\ClientIdentityContext` is a deliberate process-local mutable
-  static** (the only one in this package): the SDK hands its reference
-  handler the JSON-RPC request, not the PSR-7 one, so the client id resolved
-  by `SharedSecretMiddleware` cannot travel as a request attribute all the
-  way down. `McpAction` arms it before `Server::run()` and disarms in a
-  `finally`. It is deliberately NOT the primary identity source — the
-  session's immutable owner is (it travels with the request and survives
-  Fiber interleaving); the holder covers only sessionless calls and
-  sessions with no recorded owner, and a holder/owner disagreement fails
-  closed. Do not read it outside `InterceptingReferenceHandler` and
-  `ClientBoundRequestStateBinder` (@internal), and never store the raw secret
-  in it. The binder is the one other reader because it has no session to read
-  from: on the stateless era the SDK hands a `RequestStateBinderInterface`
-  only the JSON-RPC request and an OAuth token, and behind
-  `SharedSecretMiddleware` there is no token — without the holder a
-  `requestState` minted for one client would verify for another
-  (`aStateReplayedByAnotherClientDoesNotVerify`).
+- **The client id travels with the request, never in static state.**
+  `Identity\RequestIdentity` (@internal) puts it into the SDK `AccessToken` that
+  the transport hands to the reference handler (through the session, one request
+  only, never persisted) and to the request-state binder. The claim value is an
+  OBJECT so no JWT can forge it. `ClientBoundRequestStateBinder` must give the
+  inner binder the ORIGINAL token: a token without a subject makes the SDK bind
+  to a random value and no state would ever verify. The session owner still
+  wins; a disagreement fails closed. `InterleavedIdentityTest` is the guard.
 - **OAuth: a token never becomes an anonymous request.**
   `OAuth\BearerTokenMiddleware` puts the SDK's `AuthorizationMiddleware` first
   (validation, `WWW-Authenticate` challenges, scopes — never re-implement

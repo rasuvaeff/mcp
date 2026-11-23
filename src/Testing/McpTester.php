@@ -16,6 +16,7 @@ use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use Rasuvaeff\Mcp\Identity\RequestIdentity;
 use RuntimeException;
 
 /**
@@ -55,6 +56,8 @@ final class McpTester
      *                                              newest handshake revision
      * @param ClientCapabilities|null $capabilities what the tester claims to support — declare
      *                                              `elicitation` to test a tool that asks the user
+     * @param string|null $clientId the client every request is made as, what `SharedSecretMiddleware` or
+     *                              `OAuth\BearerTokenMiddleware` resolves in production; null = anonymous
      */
     public function __construct(
         private readonly Server $server,
@@ -63,6 +66,7 @@ final class McpTester
         private readonly StreamFactoryInterface $streamFactory,
         private readonly ?ProtocolVersion $protocolVersion = null,
         private readonly ?ClientCapabilities $capabilities = null,
+        private readonly ?string $clientId = null,
     ) {
         $this->toolCatalog = new ToolCatalog();
     }
@@ -270,7 +274,7 @@ final class McpTester
         }
 
         return $this->server->run(new StreamableHttpTransport(
-            request: $request,
+            request: RequestIdentity::attach($request, $this->clientId),
             responseFactory: $this->responseFactory,
             streamFactory: $this->streamFactory,
         ));

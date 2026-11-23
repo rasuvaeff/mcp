@@ -8,7 +8,6 @@ use Mcp\Server\Session\InMemorySessionStore;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
 use Psr\Http\Message\ResponseInterface;
-use Rasuvaeff\Mcp\Identity\ClientIdentityContext;
 use Rasuvaeff\Mcp\McpAction;
 use Rasuvaeff\Mcp\McpServerFactory;
 use Rasuvaeff\Mcp\OutputBufferReleasingStream;
@@ -444,8 +443,6 @@ final class McpActionTest
         )));
 
         Assert::same($recording->lastContext?->clientId, 'claude');
-        // The holder never outlives the request.
-        Assert::null(ClientIdentityContext::current());
     }
 
     private function initialize(): ResponseInterface

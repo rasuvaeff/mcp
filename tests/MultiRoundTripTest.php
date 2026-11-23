@@ -8,7 +8,6 @@ use Mcp\Schema\ClientCapabilities;
 use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Server\Session\InMemorySessionStore;
 use Nyholm\Psr7\Factory\Psr17Factory;
-use Rasuvaeff\Mcp\Identity\ClientIdentityContext;
 use Rasuvaeff\Mcp\Interceptor\ToolCallBudgetInterceptor;
 use Rasuvaeff\Mcp\Interceptor\ToolCallInterceptorInterface;
 use Rasuvaeff\Mcp\McpServerFactory;
@@ -118,14 +117,14 @@ final class MultiRoundTripTest
     public function aStateReplayedByAnotherClientDoesNotVerify(): void
     {
         foreach (['client-a' => true, 'client-b' => false] as $replayingClient => $verifies) {
-            $state = $this->secondRoundState('client-a', $this->tester(requestStateKey: self::KEY));
+            $state = $this->secondRoundState($this->tester(requestStateKey: self::KEY, clientId: 'client-a'));
 
-            Assert::same($this->thirdRoundSucceeds($replayingClient, $this->tester(requestStateKey: self::KEY), $state), $verifies);
+            Assert::same($this->thirdRoundSucceeds($this->tester(requestStateKey: self::KEY, clientId: $replayingClient), $state), $verifies);
         }
 
         // without the binding a replay verifies — the 4.x behaviour
-        $state = $this->secondRoundState('client-a', $this->tester(requestStateKey: self::KEY, bind: false));
-        Assert::true($this->thirdRoundSucceeds('client-b', $this->tester(requestStateKey: self::KEY, bind: false), $state));
+        $state = $this->secondRoundState($this->tester(requestStateKey: self::KEY, bind: false, clientId: 'client-a'));
+        Assert::true($this->thirdRoundSucceeds($this->tester(requestStateKey: self::KEY, bind: false, clientId: 'client-b'), $state));
     }
 
     /**
@@ -135,10 +134,10 @@ final class MultiRoundTripTest
     public function aStateSignedWithAPreviousKeyVerifiesUntilTheKeyIsDropped(): void
     {
         $newKey = 'the-next-request-state-signing-key-32-bytes+';
-        $state = $this->secondRoundState('client-a', $this->tester(requestStateKey: self::KEY));
+        $state = $this->secondRoundState($this->tester(requestStateKey: self::KEY, clientId: 'client-a'));
 
-        Assert::true($this->thirdRoundSucceeds('client-a', $this->tester(requestStateKey: $newKey, previousKeys: [self::KEY]), $state));
-        Assert::false($this->thirdRoundSucceeds('client-a', $this->tester(requestStateKey: $newKey), $state));
+        Assert::true($this->thirdRoundSucceeds($this->tester(requestStateKey: $newKey, previousKeys: [self::KEY], clientId: 'client-a'), $state));
+        Assert::false($this->thirdRoundSucceeds($this->tester(requestStateKey: $newKey, clientId: 'client-a'), $state));
     }
 
     public function previousKeysWithoutACurrentOneFailTheBuild(): void
@@ -148,32 +147,22 @@ final class MultiRoundTripTest
         $this->tester(previousKeys: [self::KEY]);
     }
 
-    private function secondRoundState(string $clientId, McpTester $tester): string
+    private function secondRoundState(McpTester $tester): string
     {
-        ClientIdentityContext::arm($clientId);
-
-        try {
-            $tester->callTool('order.rename', ['orderId' => '42']);
-            $second = $this->answer($tester, 'order.rename', ['name' => ['action' => 'accept', 'content' => ['name' => 'urgent']]]);
-        } finally {
-            ClientIdentityContext::disarm();
-        }
+        $tester->callTool('order.rename', ['orderId' => '42']);
+        $second = $this->answer($tester, 'order.rename', ['name' => ['action' => 'accept', 'content' => ['name' => 'urgent']]]);
 
         return (string) $second['requestState'];
     }
 
-    private function thirdRoundSucceeds(string $clientId, McpTester $tester, string $state): bool
+    private function thirdRoundSucceeds(McpTester $tester, string $state): bool
     {
-        ClientIdentityContext::arm($clientId);
-
         try {
             $third = $this->answer($tester, 'order.rename', ['confirm' => ['action' => 'accept', 'content' => ['confirm' => true]]], $state);
 
             return ($third['content'][0]['text'] ?? null) === '42 renamed to urgent';
         } catch (McpErrorException) {
             return false;
-        } finally {
-            ClientIdentityContext::disarm();
         }
     }
 
@@ -257,6 +246,7 @@ final class MultiRoundTripTest
         array $interceptors = [],
         array $previousKeys = [],
         bool $bind = true,
+        ?string $clientId = null,
     ): McpTester {
         $factory = new Psr17Factory();
         $server = (new McpServerFactory(
@@ -277,6 +267,7 @@ final class MultiRoundTripTest
             streamFactory: $factory,
             protocolVersion: ProtocolVersion::V2026_07_28,
             capabilities: new ClientCapabilities(elicitation: true),
+            clientId: $clientId,
         );
     }
 }

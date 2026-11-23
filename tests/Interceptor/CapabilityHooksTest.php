@@ -7,7 +7,6 @@ namespace Rasuvaeff\Mcp\Tests\Interceptor;
 use Mcp\Server\Server;
 use Mcp\Server\Session\InMemorySessionStore;
 use Nyholm\Psr7\Factory\Psr17Factory;
-use Rasuvaeff\Mcp\Identity\ClientIdentityContext;
 use Rasuvaeff\Mcp\Interceptor\InterceptingReferenceHandler;
 use Rasuvaeff\Mcp\Interceptor\PromptGetInterceptorInterface;
 use Rasuvaeff\Mcp\Interceptor\ResourceReadInterceptorInterface;
@@ -176,20 +175,14 @@ final class CapabilityHooksTest
         }
     }
 
-    public function armedClientIdentityReachesPromptAndResourceContexts(): void
+    public function theClientIdReachesPromptAndResourceContexts(): void
     {
         $prompt = new RecordingPromptInterceptor();
         $resource = new RecordingResourceInterceptor();
-        $tester = $this->tester(promptInterceptors: [$prompt], resourceInterceptors: [$resource]);
+        $tester = $this->tester(promptInterceptors: [$prompt], resourceInterceptors: [$resource], clientId: 'claude');
 
-        ClientIdentityContext::arm('claude');
-
-        try {
-            $tester->request('prompts/get', ['name' => 'greeting-style']);
-            $tester->readResource('app://status');
-        } finally {
-            ClientIdentityContext::disarm();
-        }
+        $tester->request('prompts/get', ['name' => 'greeting-style']);
+        $tester->readResource('app://status');
 
         Assert::same($prompt->lastContext?->clientId, 'claude');
         Assert::same($resource->lastContext?->clientId, 'claude');
@@ -319,6 +312,7 @@ final class CapabilityHooksTest
         array $resourceInterceptors = [],
         ?PromptVisibilityInterface $promptVisibility = null,
         ?ResourceVisibilityInterface $resourceVisibility = null,
+        ?string $clientId = null,
     ): McpTester {
         $factory = new Psr17Factory();
 
@@ -327,6 +321,7 @@ final class CapabilityHooksTest
             requestFactory: $factory,
             responseFactory: $factory,
             streamFactory: $factory,
+            clientId: $clientId,
         );
     }
 
