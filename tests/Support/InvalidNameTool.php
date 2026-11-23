@@ -1,0 +1,19 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Rasuvaeff\Mcp\Tests\Support;
+
+use Mcp\Server\Capability\Attribute\McpTool;
+
+final readonly class InvalidNameTool
+{
+    /**
+     * Registers under a name the SDK NameValidator warns about.
+     */
+    #[McpTool(name: 'bad name!')]
+    public function bad(): string
+    {
+        return 'bad';
+    }
+}

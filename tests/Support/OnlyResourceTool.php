@@ -1,0 +1,16 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Rasuvaeff\Mcp\Tests\Support;
+
+use Mcp\Server\Capability\Attribute\McpResource;
+
+final readonly class OnlyResourceTool
+{
+    #[McpResource(uri: 'app://only-resource', name: 'only-resource')]
+    public function read(): string
+    {
+        return 'resource-data';
+    }
+}

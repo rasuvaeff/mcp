@@ -1,0 +1,258 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Rasuvaeff\Mcp\Tests;
+
+use Mcp\Schema\Prompt;
+use Mcp\Schema\ResourceDefinition;
+use Mcp\Schema\ResourceTemplate;
+use Mcp\Schema\Tool;
+use Mcp\Server\Builder;
+use Mcp\Server\Capability\Registry;
+use Mcp\Server\Capability\Registry\ResourceTemplateReference;
+use Mcp\Server\Exception\ResourceNotFoundException;
+use Mcp\Server\Session\InMemorySessionStore;
+use Psr\Log\NullLogger;
+use Rasuvaeff\Mcp\Exception\DuplicateCapabilityException;
+use Rasuvaeff\Mcp\GuardedRegistry;
+use Rasuvaeff\Mcp\McpServerFactory;
+use Rasuvaeff\Mcp\ServerConfiguratorInterface;
+use Rasuvaeff\Mcp\Tests\Support\GreetingTool;
+use Rasuvaeff\Understudy\Arg;
+use Rasuvaeff\Understudy\Invocation;
+use Rasuvaeff\Understudy\Understudy;
+use Testo\Assert;
+use Testo\Codecov\Covers;
+use Testo\Test;
+use Yiisoft\Test\Support\Container\SimpleContainer;
+
+use function Rasuvaeff\Understudy\when;
+
+#[Test]
+#[Covers(GuardedRegistry::class)]
+#[Covers(DuplicateCapabilityException::class)]
+final class GuardedRegistryTest
+{
+    public function duplicateToolNameThrowsInsteadOfLastWriteWins(): void
+    {
+        $registry = $this->registry();
+        $registry->registerTool($this->tool('lookup'), static fn(): string => 'first');
+
+        $caught = null;
+
+        try {
+            $registry->registerTool($this->tool('lookup'), static fn(): string => 'second');
+        } catch (DuplicateCapabilityException $caught) {
+        }
+
+        Assert::notNull($caught);
+        Assert::string($caught->getMessage())->contains('lookup');
+    }
+
+    public function duplicateResourceUriThrows(): void
+    {
+        $registry = $this->registry();
+        $registry->registerResource($this->resource('app://config'), static fn(): string => 'first');
+
+        $caught = null;
+
+        try {
+            $registry->registerResource($this->resource('app://config'), static fn(): string => 'second');
+        } catch (DuplicateCapabilityException $caught) {
+        }
+
+        Assert::notNull($caught);
+    }
+
+    public function duplicateResourceTemplateThrows(): void
+    {
+        $registry = $this->registry();
+        $registry->registerResourceTemplate($this->template('app://user/{id}'), static fn(string $id): string => $id);
+
+        $caught = null;
+
+        try {
+            $registry->registerResourceTemplate($this->template('app://user/{id}'), static fn(string $id): string => $id);
+        } catch (DuplicateCapabilityException $caught) {
+        }
+
+        Assert::notNull($caught);
+    }
+
+    public function duplicatePromptNameThrows(): void
+    {
+        $registry = $this->registry();
+        $registry->registerPrompt(new Prompt(name: 'style'), static fn(): string => 'first');
+
+        $caught = null;
+
+        try {
+            $registry->registerPrompt(new Prompt(name: 'style'), static fn(): string => 'second');
+        } catch (DuplicateCapabilityException $caught) {
+        }
+
+        Assert::notNull($caught);
+    }
+
+    public function reRegisteringAfterAnExplicitUnregisterIsAllowed(): void
+    {
+        $registry = $this->registry();
+        $registry->registerTool($this->tool('lookup'), static fn(): string => 'first');
+        $registry->unregisterTool('lookup');
+        $registry->registerTool($this->tool('lookup'), static fn(): string => 'second');
+
+        Assert::true($registry->hasTool('lookup'));
+    }
+
+    public function reRegisteringAResourceAfterAnExplicitUnregisterIsAllowed(): void
+    {
+        $registry = $this->registry();
+        $registry->registerResource($this->resource('app://config'), static fn(): string => 'first');
+        $registry->unregisterResource('app://config');
+
+        Assert::false($registry->hasResource('app://config'));
+
+        $registry->registerResource($this->resource('app://config'), static fn(): string => 'second');
+
+        Assert::true($registry->hasResource('app://config'));
+    }
+
+    public function reRegisteringATemplateAfterAnExplicitUnregisterIsAllowed(): void
+    {
+        $registry = $this->registry();
+        $registry->registerResourceTemplate($this->template('app://user/{id}'), static fn(string $id): string => $id);
+        $registry->unregisterResourceTemplate('app://user/{id}');
+
+        Assert::false($registry->hasResourceTemplate('app://user/{id}'));
+
+        $registry->registerResourceTemplate($this->template('app://user/{id}'), static fn(string $id): string => $id);
+
+        Assert::true($registry->hasResourceTemplate('app://user/{id}'));
+    }
+
+    public function reRegisteringAPromptAfterAnExplicitUnregisterIsAllowed(): void
+    {
+        $registry = $this->registry();
+        $registry->registerPrompt(new Prompt(name: 'style'), static fn(): string => 'first');
+        $registry->unregisterPrompt('style');
+
+        Assert::false($registry->hasPrompt('style'));
+
+        $registry->registerPrompt(new Prompt(name: 'style'), static fn(): string => 'second');
+
+        Assert::true($registry->hasPrompt('style'));
+    }
+
+    public function getResourceResolvesTemplatesUnlessTheyAreExcluded(): void
+    {
+        $registry = $this->registry();
+        $registry->registerResourceTemplate($this->template('app://user/{id}'), static fn(string $id): string => $id);
+
+        Assert::instanceOf($registry->getResource('app://user/5'), ResourceTemplateReference::class);
+
+        $caught = null;
+
+        try {
+            $registry->getResource('app://user/5', includeTemplates: false);
+        } catch (ResourceNotFoundException $caught) {
+        }
+
+        Assert::notNull($caught);
+    }
+
+    public function factoryDetectsACollisionBetweenConfiguratorAndAttributeTool(): void
+    {
+        // a plain configurator (NOT ReservedToolNamesAware) grabbing an
+        // attribute tool's name used to silently shadow it — the SDK's
+        // explicit loader runs first and its registry is last-write-wins;
+        // the guarded registry turns the collision into a build error
+        $factory = new McpServerFactory(
+            container: new SimpleContainer([GreetingTool::class => new GreetingTool(prefix: 'Hello')]),
+            sessionStore: new InMemorySessionStore(),
+        );
+
+        $configurator = Understudy::for(ServerConfiguratorInterface::class);
+        when(fn() => $configurator->configure(Arg::any()))->answers(
+            static function (Invocation $call): void {
+                $builder = $call->arg('builder');
+                \assert($builder instanceof Builder);
+                $builder->addTool(static fn(): string => 'shadow', name: 'greet');
+            },
+        );
+
+        $caught = null;
+
+        try {
+            $factory->create([GreetingTool::class], [$configurator]);
+        } catch (\Throwable $caught) {
+        }
+
+        // the SDK's loader may wrap the guard's exception; the root cause
+        // must still be the duplicate detection
+        Assert::notNull($caught);
+        $duplicate = $caught instanceof DuplicateCapabilityException ? $caught : $caught->getPrevious();
+        Assert::instanceOf($duplicate, DuplicateCapabilityException::class);
+        Assert::string($caught->getMessage())->contains('greet');
+    }
+
+    public function factoryDetectsACollisionBetweenTwoConfigurators(): void
+    {
+        $factory = new McpServerFactory(
+            container: new SimpleContainer([]),
+            sessionStore: new InMemorySessionStore(),
+        );
+
+        $caught = null;
+
+        try {
+            $factory->create([], [$this->promptAddingConfigurator(), $this->promptAddingConfigurator()]);
+        } catch (\Throwable $caught) {
+        }
+
+        Assert::notNull($caught);
+        $duplicate = $caught instanceof DuplicateCapabilityException ? $caught : $caught->getPrevious();
+        Assert::instanceOf($duplicate, DuplicateCapabilityException::class);
+        Assert::string($caught->getMessage())->contains('shared-prompt');
+    }
+
+    private function promptAddingConfigurator(): ServerConfiguratorInterface
+    {
+        $configurator = Understudy::for(ServerConfiguratorInterface::class);
+        when(fn() => $configurator->configure(Arg::any()))->answers(
+            static function (Invocation $call): void {
+                $builder = $call->arg('builder');
+                \assert($builder instanceof Builder);
+                $builder->addPrompt(static fn(): string => 'ok', name: 'shared-prompt');
+            },
+        );
+
+        return $configurator;
+    }
+
+    private function registry(): GuardedRegistry
+    {
+        return new GuardedRegistry(new Registry(logger: new NullLogger()));
+    }
+
+    private function tool(string $name): Tool
+    {
+        return new Tool(
+            name: $name,
+            title: null,
+            inputSchema: ['type' => 'object', 'properties' => new \stdClass(), 'required' => null],
+            description: null,
+            annotations: null,
+        );
+    }
+
+    private function resource(string $uri): ResourceDefinition
+    {
+        return new ResourceDefinition(uri: $uri, name: 'r');
+    }
+
+    private function template(string $uriTemplate): ResourceTemplate
+    {
+        return new ResourceTemplate(uriTemplate: $uriTemplate, name: 't');
+    }
+}
