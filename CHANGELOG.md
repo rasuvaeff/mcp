@@ -9,3 +9,4 @@
 - **Changed:** the client id travels with the request instead of a process-wide
   static slot, so interleaved requests (Fibers, Swoole) keep their own identity.
 - **Added:** `McpTester(clientId:)` makes every request as that client.
+- **Added:** agent skill `rasuvaeff-mcp` in `resources/skills`.
