@@ -426,9 +426,7 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   contract — not the examples.** `Utf8::cut()` (budget, encodability, prefix
   relation), `OpenApi\ToolNameValidator` (charset + length; stated
   independently of the class's own regex, which is what makes it able to catch
-  a `\z` → `$` regression), `OpenApi\JsonPointerResolver` (depth/cycle
-  termination — `timeoutMs` is mandatory there, a hung guard must fail CI, not
-  hang it), `Interceptor\ArgumentMasker` (idempotence, no sensitive value at
+  a `\z` → `$` regression), `Interceptor\ArgumentMasker` (idempotence, no sensitive value at
   any depth, structure preserved), `Visibility\DeclarativeToolVisibility`
   (deny beats allow, monotonicity) and `Interceptor\ToolCallBudgetInterceptor`
   (model-based for both eras: `tests/Support/SessionBudget/` and
