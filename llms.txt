@@ -1,0 +1,619 @@
+# mcp
+
+Framework-neutral MCP (Model Context Protocol) server runtime over the official
+mcp/sdk: PSR-15 Streamable HTTP endpoint, PSR-11 tool registry, stdio transport.
+
+## Install
+
+```bash
+composer require rasuvaeff/mcp
+```
+
+## Rules
+
+- Namespace `Rasuvaeff\Mcp`; short class names below are relative to it.
+- The endpoint is trusted-only: `SharedSecretMiddleware`,
+  `OAuth\BearerTokenMiddleware` or a network ACL in front of `McpAction`.
+- Attributes, JSON-RPC, transports and sessions come from `mcp/sdk` (`~0.10.0`,
+  minor = breaking); never invent protocol structures.
+- Pass the same session store to `McpServerFactory` and `McpAction`; never an
+  in-memory store under PHP-FPM or with several workers.
+- Capability names are unique across the server; a collision throws
+  `Exception\DuplicateCapabilityException` at build time.
+- Two eras on one endpoint: handshake (`initialize`, session) and stateless
+  2026-07-28 (no session). State kept "per session" does nothing on the latter.
+- No Composer config plugin here. A params key named below belongs to
+  `rasuvaeff/yii3-mcp`; elsewhere pass the matching constructor argument.
+- Other types: `Identity\ExecutionIdentity`,
+  `Identity\ExecutionIdentityProviderInterface` (on whose behalf a call runs),
+  `Identity\SecretResolverInterface`, `Identity\StaticSecretResolver`,
+  `Session\PrivateFileSessionStore`, `Exception\SessionOwnershipException`,
+  `ReservedToolNamesAwareInterface`.
+
+## API reference
+
+### Declaring tools (SDK attributes on ordinary services)
+
+```php
+use Mcp\Server\Capability\Attribute\McpTool;
+use Mcp\Server\Capability\Attribute\McpResource;
+
+final readonly class OrderTools
+{
+    public function __construct(private OrderRepository $orders) {} // DI works
+
+    #[McpTool(name: 'order.status')]
+    public function status(string $orderId): string { ... }   // schema from signature+DocBlock
+
+    // Structured output: declare outputSchema + return an array — the SDK
+    // serves the schema in tools/list and mirrors the return value into the
+    // result's structuredContent (alongside the text content). An array/object
+    // return produces structuredContent even without outputSchema.
+    #[McpTool(name: 'order.details', outputSchema: [
+        'type' => 'object',
+        'properties' => ['status' => ['type' => 'string'], 'total' => ['type' => 'integer']],
+        'required' => ['status', 'total'],
+    ])]
+    public function details(string $orderId): array { ... }
+
+    #[McpResource(uri: 'app://health', name: 'health', mimeType: 'text/plain')]
+    public function health(): string { ... }
+
+    #[McpResourceTemplate(uriTemplate: 'app://users/{id}')]
+    public function user(string $id): string { ... }
+
+    #[McpPrompt(name: 'style-guide')]
+    public function styleGuide(): string { ... }
+}
+
+// Conditional registration: implement Rasuvaeff\Mcp\ConditionalToolInterface;
+// shouldRegister() false at build time => the whole class is skipped
+// (resolve FeatureFlags etc. through the constructor).
+
+// Testing (in-process, no HTTP):
+use Rasuvaeff\Mcp\Testing\McpTester;
+$tester = new McpTester($server, $psr17RequestFactory, $psr17ResponseFactory, $psr17StreamFactory);
+// default revision = ProtocolVersion::latestHandshake() (MessageInterface::PROTOCOL_VERSION
+// is 2026-07-28 since SDK 0.9); requests go to http://localhost/mcp (the SDK refuses a
+// request without an allowed Host); empty tool arguments are sent as {}
+$tester->callTool('greet', ['name' => 'Yii']);   // decoded result envelope
+$tester->listTools(); $tester->listResources(); $tester->listResourceTemplates(); $tester->listPrompts();
+// list* methods follow nextCursor and return every page
+$tester->readResource('app://x'); $tester->request('custom/method');
+// 5th arg = protocol revision: null/handshake revision => initialize;
+// ProtocolVersion::V2026_07_28 => stateless era (no initialize/session, _meta +
+// Mcp-Method/Mcp-Name headers per request; initialize() = server/discover);
+// the server needs McpServerFactory(modernEra: true).
+// 6th arg = ClientCapabilities (declare elicitation: true to test a tool that asks).
+// JSON-RPC error => Testing\McpErrorException (a RuntimeException):
+//   ->errorCode (int), ->errorMessage, ->errorData
+
+// Schema contract canary (drift in served schemas fails the build):
+use Rasuvaeff\Mcp\Testing\SchemaSnapshot;
+SchemaSnapshot::verify($tester, __DIR__ . '/mcp-schema.json');
+// verify(): missing file OR mismatch => RuntimeException with per-section
+// drift summary ("tools: changed [greet]") — use in CI.
+// assert(): missing file => generated (first run passes), else like verify().
+// record(): deliberately (re)writes the file. Env MCP_SNAPSHOT_RECORD=1
+// (any value except ''/'0') switches assert()/verify() into record mode —
+// the regeneration path; CI must not set it.
+// SchemaSnapshot::capture($tester) returns the normalized array
+// {tools, resources, resourceTemplates, prompts}.
+```
+
+### Tool annotations and server-initiated communication
+
+Use the official SDK metadata directly; this package does not define parallel
+hint attributes. Hints are advisory client metadata, never authorization or a
+server-side safety policy:
+
+```php
+use Mcp\Schema\ToolAnnotations;
+
+#[McpTool(
+    name: 'order.cancel',
+    annotations: new ToolAnnotations(
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+    ),
+)]
+public function cancel(string $orderId): string { ... }
+```
+
+For progress, client logging, sampling or elicitation, accept the SDK's
+request-scoped `Mcp\Server\RequestContext` as a method parameter. The SDK
+injects it and omits it from the generated input schema. Do not constructor-
+inject or persist it across requests.
+
+```php
+use Mcp\Schema\Elicitation\BooleanSchemaDefinition;
+use Mcp\Schema\Elicitation\ElicitationSchema;
+use Mcp\Server\RequestContext;
+
+public function deploy(string $version, RequestContext $context): string
+{
+    $client = $context->getClientGateway();
+    $client->progress(progress: 1, total: 2, message: 'Validated'); // no-op without progress token
+
+    if (!$client->supportsElicitation()) {
+        throw new RuntimeException('Client does not support required confirmation');
+    }
+
+    $result = $client->elicit(
+        message: "Deploy {$version}?",
+        requestedSchema: new ElicitationSchema(
+            properties: ['confirmed' => new BooleanSchemaDefinition(title: 'Confirm deployment')],
+            required: ['confirmed'],
+        ),
+    );
+
+    if (!$result->isAccepted() || ($result->content['confirmed'] ?? false) !== true) {
+        throw new RuntimeException('Deployment was not confirmed');
+    }
+
+    return 'queued';
+}
+```
+
+`ClientGateway::log()` emits a notification. `sample()` and `elicit()` suspend
+the tool Fiber until a supporting client responds or the SDK timeout expires.
+For destructive operations, check capability support and fail closed.
+
+### McpServerFactory
+
+```php
+use Rasuvaeff\Mcp\McpServerFactory;
+
+$factory = new McpServerFactory(
+    container: $psr11Container,        // resolves tool instances lazily
+    sessionStore: $sessionStore,       // Mcp\Server\Session\SessionStoreInterface
+    name: 'my-app',
+    version: '1.0.0',
+    logger: null,                      // ?LoggerInterface
+);
+$server = $factory->create([OrderTools::class]);  // Mcp\Server
+// throws Rasuvaeff\Mcp\Exception\InvalidToolClassException on unknown
+// class or class without capability attributes
+```
+
+### McpAction (PSR-15)
+
+```php
+use Rasuvaeff\Mcp\McpAction;
+
+new McpAction(server: $server, responseFactory: $psr17, streamFactory: $psr17);
+// handle(ServerRequestInterface): ResponseInterface — Streamable HTTP transport
+// route POST/GET/DELETE/OPTIONS /mcp to it
+```
+
+### SharedSecretMiddleware
+
+```php
+use Rasuvaeff\Mcp\SharedSecretMiddleware;
+
+new SharedSecretMiddleware(
+    secret: 's3cret',                  // '' => every request gets 503 + explanation (fail-closed)
+    responseFactory: $psr17,
+    headerName: 'X-Mcp-Secret',        // default
+    resolver: null,                    // OR Identity\SecretResolverInterface (mutually exclusive with secret)
+);
+// wrong/missing header => 401, никогда не пропускает без секрета
+
+// Several clients + secret rotation (params 'client_secrets' builds this):
+use Rasuvaeff\Mcp\Identity\StaticSecretResolver;
+new StaticSecretResolver([
+    'ci' => 'ci-secret',
+    'claude' => ['old-secret', 'new-secret'],  // both ACTIVE during rotation
+]);
+// hash_equals per candidate; resolve(presented) => client id | null.
+// Resolved id => request attribute SharedSecretMiddleware::CLIENT_ID_ATTRIBUTE,
+// carried per-request by internal Identity\ClientIdentityContext (the SDK hands
+// handlers the JSON-RPC request, not the PSR-7 one), exposed as
+// ToolCallContext::$clientId and mirrored into the session
+// (InterceptingReferenceHandler::CLIENT_ID_SESSION_KEY). Raw secret never
+// travels past the middleware. Single secret = client id "default".
+// stdio => $clientId null.
+```
+
+### OAuth\BearerTokenMiddleware (OAuth 2.1 resource server)
+
+```php
+// alternative to SharedSecretMiddleware; DI builds it from params 'oauth'
+// route: [BearerTokenMiddleware::class, McpAction::class] at /mcp
+//        + Mcp\Server\Transport\Http\OAuth\ProtectedResourceMetadataHandler
+//          at GET /.well-known/oauth-protected-resource/mcp (RFC 9728)
+'oauth' => [
+    'resource' => 'https://mcp.example.com/mcp',           // '' = not configured: building the guard throws
+    'authorization_servers' => ['https://auth.example.com'], // at least one
+    'issuer' => '', 'audience' => [],                        // '' / [] = first server / the resource
+    'algorithms' => ['RS256'], 'token_type' => '', 'leeway' => 0, 'scope_claim' => 'scope',
+    'scopes_supported' => [],
+    'scopes' => ['default' => [], 'methods' => ['tools/call' => ['mcp']],
+                 'tools' => ['order.cancel' => ['orders:write']], 'implies' => ['orders:admin' => ['orders:write']]],
+    'identity' => 'principal',   // | 'client_id' | 'subject' — becomes the client id
+    'validator' => '',           // service id of own AuthorizationTokenValidatorInterface
+    'cache' => '',               // PSR-6 pool service id ('' = CacheItemPoolInterface)
+    'resource_name' => '', 'resource_documentation' => '',
+],
+// Validation/challenges/scopes = the SDK's AuthorizationMiddleware: JWT through the
+// issuer's discovery + JWKS (needs firebase/php-jwt; psr/cache pool; container PSR-18
+// client when bound). 401 (no/invalid/expired/foreign token), 403 insufficient_scope,
+// 503 + Retry-After (keys unavailable). A token WITHOUT the identity claim => 401
+// invalid_token, never anonymous. The AccessToken stays on the request:
+// RequestContext::getAccessToken(); the SDK binds the session to its principal.
+// Misconfiguration throws at build, naming the param.
+```
+
+### McpServeCommand (stdio, symfony/console)
+
+`mcp:serve` — runs the server on StdioTransport for Claude Code/Desktop.
+
+### McpListCommand (console introspection)
+
+`mcp:list` — prints every served tool/resource/resource-template/prompt with
+argument summaries (`name*` = required) via the in-process JSON-RPC path (no
+MCP client needed). Constructor: Server + PSR-17 ServerRequestFactory/
+ResponseFactory/StreamFactory (must be in the container).
+`mcp:list --json` — full capability definitions (input/output schemas
+included) as normalized JSON (SchemaSnapshot format: stable item order,
+sorted object keys) for CI diffs and external automation.
+
+### Argument autocompletion (completion/complete)
+
+```php
+use Mcp\Server\Capability\Attribute\CompletionProvider;
+
+#[McpPrompt(name: 'review')]
+public function review(
+    #[CompletionProvider(values: ['security', 'performance'])] string $focus,
+    #[CompletionProvider(enum: Environment::class)] string $environment,
+): string { ... }
+
+#[McpResourceTemplate(uriTemplate: 'app://reports/{region}', name: 'report')]
+public function report(
+    #[CompletionProvider(provider: RegionCompletionProvider::class)] string $region,
+): string { ... }
+```
+
+- Exactly ONE of `values` / `enum` / `provider` per argument (the SDK attribute
+  throws otherwise). `provider` is a `Mcp\Server\Capability\Completion\ProviderInterface`
+  FQCN resolved through the DI container, so it can query application services.
+- The `completions` capability is advertised automatically; no params key.
+- Completions respect `prompt_visibility` / `resource_visibility`: a hidden
+  prompt or template completes nothing and answers "not found", byte-identical
+  to a missing one (`Visibility\FilteredCompletionCompleteHandler`).
+- Interceptors do NOT wrap completion/complete — it is a metadata lookup, not a
+  capability call. Put authorization in the visibility filter.
+
+### Resource update notifications
+
+```php
+use Rasuvaeff\Mcp\Resource\ResourceUpdateNotifier;
+
+public function __construct(private ResourceUpdateNotifier $notifier) {}
+
+#[McpTool(name: 'order.cancel')]
+public function cancel(string $orderId, RequestContext $context): string
+{
+    $this->orders->cancel($orderId);
+    $this->notifier->notify('app://orders/' . $orderId, $context);  // void; $context optional
+
+    return 'cancelled';
+}
+```
+
+- Requires the SDK's request-scoped `RequestContext` (a method parameter; the SDK
+  keeps it out of the generated input schema).
+- Publishes to the notification bus when one is bound (params
+  'notifications' => ['bus' => ''|'psr16'|'psr6'|'memory', 'subscription_lifetime' => 30]):
+  every stateless subscriptions/listen stream whose filter names the URI gets
+  it, from any process — no $context needed (queue worker, console).
+- With a handshake-era $context: checks the session subscription first (never
+  unsolicited) and notifies the CALLING session only.
+- Handshake sessions: reaches ONLY the calling session. `SubscriptionManagerInterface` is bound in
+  `config/di.php` (default `SessionSubscriptionManager`) and shared with the SDK's
+  subscribe/unsubscribe handlers — swap the binding and both sides follow.
+- Sends by suspending the handler Fiber; outside a Fiber `ClientGateway::notify()`
+  throws, so test it inside `new Fiber(...)`, not through `Testing\McpTester`
+  (once a handler notifies, the transport streams to output and the PSR-7 body is
+  empty — a known limit of the tester).
+
+### MCP Apps (io.modelcontextprotocol/ui)
+
+Interactive HTML apps served as `ui://` resources, rendered by the client in
+a sandboxed iframe. The extension must be announced during the handshake —
+without it a `ui://` resource is just text to the client.
+
+```php
+// params: declarative apps (no PHP class), snake_case keys
+'rasuvaeff/yii3-mcp' => [
+    'apps' => [
+        'enable' => true,               // announce the extension
+        'definitions' => [[
+            'uri' => 'ui://dashboard',  // required, must start with ui://
+            'name' => 'dashboard',      // required, unique
+            'html' => '<!DOCTYPE html>…', // string OR Closure(): string
+            'title' => 'Dashboard',
+            'description' => 'Sales overview',
+            'csp' => ['connect_domains' => ['api.example.com']],
+            'permissions' => ['geolocation' => true],
+            'domain' => null,
+            'prefers_border' => true,
+        ]],
+    ],
+],
+
+// programmatic equivalent
+use Rasuvaeff\Mcp\Apps\AppDefinition;
+use Rasuvaeff\Mcp\Apps\McpAppsConfigurator;
+
+new McpAppsConfigurator([
+    AppDefinition::create(
+        uri: 'ui://dashboard',
+        name: 'dashboard',
+        html: static fn (): string => renderDashboard(),   // or a plain string
+        title: 'Dashboard',
+        description: 'Sales overview',
+        contentMeta: new UiResourceContentMeta(
+            csp: new UiResourceCsp(connectDomains: ['api.example.com']),
+            permissions: new UiResourcePermissions(geolocation: true),
+            prefersBorder: true,
+        ),
+    ),
+]);
+```
+
+Attribute-based app (logic in PHP): declare `#[McpResource(uri: 'ui://…',
+mimeType: McpApps::MIME_TYPE, meta: ['ui' => new \stdClass()])]` and return a
+`TextResourceContents` carrying `meta: ['ui' => new UiResourceContentMeta(…)]`.
+Still needs `apps.enable = true` — that is what announces the extension.
+Returning a plain string works but cannot carry `_meta.ui`.
+
+- `_meta.ui` placement is NOT interchangeable: descriptor (`resources/list`)
+  gets the bare marker `{}` (`McpApps::resourceMarker()`), content
+  (`resources/read`) gets `UiResourceContentMeta` (csp, permissions, domain,
+  prefersBorder). A policy on the descriptor is ignored.
+- `html` as a `Closure(): string` is re-evaluated on EVERY `resources/read`.
+- Params permissions are plain booleans (`'camera' => false` means off) and
+  CSP keys are snake_case; the SDK's own `fromArray()` factories read
+  presence markers / camelCase and are deliberately not used.
+- `McpAppsConfigurator` is the single enabler: a second
+  `enableExtension(new McpApps())` fails the build (SDK rejects a duplicate
+  extension id).
+- App resources are ordinary resources: `ResourceVisibilityInterface` filters
+  them, `resource_interceptors` wrap their reads, a colliding `ui://` URI
+  fails the build (`DuplicateCapabilityException`).
+- Tool↔app link: `#[McpTool(meta: ['ui' => new UiToolMeta(resourceUri:
+  'ui://dashboard')])]`; `ToolVisibility::App` hides a tool from the model
+  BY THE HOST — declarative intent, not an access boundary. For a server-side
+  guarantee use `Visibility\ToolVisibilityInterface`.
+- CSP domains are passed through verbatim (host enforces the policy;
+  `definitions` is application-owned config, not client input).
+- `mcp:doctor` reports an `mcp_apps` check: skip when disabled, fail with the
+  offending definition index when a definition is malformed.
+
+### Tool-call interceptors
+
+```php
+use Rasuvaeff\Mcp\Interceptor\ToolCallContext;
+use Rasuvaeff\Mcp\Interceptor\ToolCallInterceptorInterface;
+
+final readonly class MyInterceptor implements ToolCallInterceptorInterface
+{
+    public function intercept(ToolCallContext $context, callable $next): mixed
+    {
+        // $context->toolName; $context->arguments (array<string, mixed>);
+        // $context->session (?SessionInterface); $context->clientInfo(); // ?Mcp\Schema\Implementation
+        // $context->clientId (?string — identity resolved from the endpoint
+        // secret; null on stdio)
+        return $next();   // don't call it to short-circuit
+    }
+}
+// params: 'interceptors' => [MyInterceptor::class]  — DI-resolved, first = outermost.
+// Wraps EVERY tools/call (attribute tools, OpenAPI bridge, configurators);
+// prompts/resources have their OWN chains (see "Hooks for prompts and resources").
+// throw Mcp\Server\Exception\ToolCallException => MCP tool-error envelope (agent sees reason);
+// other exceptions => opaque internal error.
+// Manual wiring: $factory->create($tools, $configurators, $interceptors).
+
+// Tool-result decorators (Interceptor\ToolResultDecoratorInterface) — add
+// content (a ResourceLink per item, an image) to the FORMATTED result:
+//   public function decorate(CallToolResult $result, ToolCallContext $context): CallToolResult
+// params: 'result_decorators' => [MyDecorator::class]  — DI-resolved, in order;
+// a class not implementing the interface fails the build. Run after the whole
+// chain on every successful tools/call (cache hits too; the cache stores the
+// raw result); added content is not counted by limits.tool_result_bytes;
+// never get an input_required ask or a ToolCallException (a handler-returned
+// CallToolResult::error() does reach them — check $result->isError). Keep
+// structuredContent unless outputSchema still describes it; when building a new
+// CallToolResult pass $result->hasStructuredContent() ? $result->structuredContent
+// : StructuredContent::Absent (since SDK 0.10 an explicit null IS sent).
+// Manual wiring: $factory->create(..., resultDecorators: [new MyDecorator()]).
+
+// Tool-call budget (Interceptor\ToolCallBudgetInterceptor — anti-loop, NOT a
+// client quota): handshake era = per session (new session = new counter);
+// stateless 2026-07-28 era = per client id and fixed window in the
+// container's PSR-16 cache (required when modern_era is on; anonymous
+// callers share one budget; cache outage => rejected):
+// params: 'tool_call_budget' => ['calls' => 50, 'window' => 3600]  // calls 0 = unlimited
+// 'session' => ['budget' => …] (3.x key) => LogicException at build
+// exhausted => tool error "Session tool-call budget of N is exhausted..." /
+//   "Tool-call budget of N per W seconds is exhausted; retry in S seconds"
+
+// Result size limit (Interceptor\ResponseSizeLimitInterceptor —
+// context-overflow guard) — a string over the limit is truncated with a
+// marker (byte budget, but never mid-character; the marker is added on top
+// of the budget and reports the bytes actually kept); any other result
+// (array/object) throws instead (truncated JSON is invalid JSON):
+// params: 'limits' => ['tool_result_bytes' => 0]  // 0 = unlimited (default)
+
+// Result caching (Interceptor\CachingToolCallInterceptor, PSR-16, opt-in by
+// tool name — for the OpenAPI bridge, the SERVED name after any tool_names
+// rename):
+// params: 'cache' => ['tools' => ['blog_tags_list' => 60]]  // toolName => TTL seconds
+//         'cache' => ['namespace' => '']  // '' => server_name; isolates apps sharing one backend
+// Typed key: mandatory namespace + resolved client id (null = typed absence,
+// never the string 'anonymous'; never shared across clients);
+// with openapi.identity_provider configured, the resolved ExecutionIdentity
+// is part of the key too (delegated credentials => identity-specific
+// results, possibly finer-grained than the client id).
+// Only successful results are cached; a thrown exception never is. A cache
+// read/write failure fails OPEN (the tool runs) — availability, not a
+// security gate. An identity provider failure fails CLOSED for cached
+// tools (serving a result without knowing whose it is = the leak the key
+// prevents).
+// Chain order: tool-call budget → configured interceptors → caching → size
+// limit (innermost). Configured interceptors (RBAC, audit) run on EVERY
+// call, including a cache hit — no ACL bypass through the cache. The size
+// limit only runs on a cache miss; the already-limited value is what gets
+// cached.
+
+// Per-client/per-tool limits — delegate to YOUR rate limiter (package ships
+// no limiter storage):
+use Rasuvaeff\Mcp\Interceptor\RateLimitInterceptor;
+use Rasuvaeff\Mcp\Interceptor\ToolCallLimiterInterface;
+// implement ToolCallLimiterInterface::allow(?string $clientId, string $toolName): bool
+// over yiisoft/rate-limiter / Redis; bind it in DI; add RateLimitInterceptor
+// to 'interceptors'. Keys: resolved client id + tool; a transport without
+// identity (stdio) passes null — typed absence, never a reserved string.
+// false => ToolCallException "Rate limit exceeded"; limiter throws =>
+// fail-closed ToolCallException (enforced quota never silently unlimited).
+
+// Retrying transient failures — package ships no retry logic (a blanket
+// retry duplicates side effects on a non-idempotent tool). Recipe: wrap
+// rasuvaeff/retry's Retry::new()->run($next) in your own
+// ToolCallInterceptorInterface, scoped to an explicit allow-list of
+// verified-idempotent tool names and to transient exception types only
+// (retryOn()). Place it near the end of 'interceptors' (closer to the
+// tool) so earlier interceptors (e.g. RateLimitInterceptor) wrap the whole
+// retry loop instead of re-triggering per attempt.
+
+// Masking sensitive arguments before logging/tracing/auditing:
+use Rasuvaeff\Mcp\Interceptor\ArgumentMasker;
+$masker = new ArgumentMasker();               // or new ArgumentMasker(['ssn', ...])
+$safe = $masker->mask($context->arguments);   // sensitive keys => '***'
+// defaults: password, secret, token, api_key, apikey, api-key, x-api-key,
+// credit_card;
+// case-insensitive exact key match, applied at EVERY nesting level — arrays
+// and the \stdClass objects SDK 0.10 passes for nested JSON objects;
+// a sensitive key's whole value (array included) becomes '***'.
+```
+
+### Tool visibility
+
+```php
+// Declarative (typical case — no code): tool-name patterns, '*' = wildcard.
+// params: 'visibility' => ['deny' => ['admin.*'], 'allow' => []]
+// deny hides matches; non-empty allow hides everything it does not match;
+// deny wins over allow; both empty (default) = all visible.
+// A 'tag:' prefix matches tags from the tool's _meta instead of its name
+// (e.g. 'tag:admin' — set by the OpenAPI bridge from OpenAPI `tags`); a tool
+// with no tags never matches a 'tag:' pattern. Tags come from the OpenAPI
+// document, so over a URL spec a 'tag:' DENY rule can be disarmed upstream by
+// dropping the tag — deny by name there, keep 'tag:' for allow-lists.
+// Manual: new Rasuvaeff\Mcp\Visibility\DeclarativeToolVisibility(deny: [...], allow: [...])
+
+// Per-session (admin vs public client, tenant plans) — implement the interface:
+use Mcp\Schema\Tool;
+use Mcp\Server\Session\SessionInterface;
+use Rasuvaeff\Mcp\Visibility\ToolVisibilityInterface;
+
+final readonly class MyVisibility implements ToolVisibilityInterface
+{
+    public function isVisible(Tool $tool, ?SessionInterface $session): bool { ... }
+}
+// params: 'tool_visibility' => MyVisibility::class  ('' = off, DI-resolved)
+// 'tool_visibility' and 'visibility' are mutually exclusive => LogicException at build.
+// Applies to tools/list (invisible tools omitted) AND tools/call (fail-closed:
+// calling a hidden tool => the same JSON-RPC error as a missing tool:
+// -32602 'Tool not found: "x".', before argument validation;
+// the call never reaches interceptors or the tool).
+// ConditionalToolInterface = build-time global; this = per-session.
+// Manual wiring: $factory->create($tools, $configurators, $interceptors, $visibility).
+
+// Multi-tenant (rasuvaeff/yii3-tenancy): route middleware order
+// SharedSecretMiddleware -> TenantResolutionMiddleware -> McpAction;
+// per-tenant session isolation = bind SessionStoreInterface to a
+// FileSessionStore with a per-tenant directory. Secret stays global
+// (trusted-only endpoint model); per-tenant secrets are a planned extension.
+```
+
+### Hooks for prompts and resources
+
+```php
+// Same seams for the other capabilities — SEPARATE interfaces and params:
+use Rasuvaeff\Mcp\Interceptor\PromptGetContext;        // ->promptName, ->arguments, ->session, ->clientId, ->clientInfo()
+use Rasuvaeff\Mcp\Interceptor\PromptGetInterceptorInterface;
+use Rasuvaeff\Mcp\Interceptor\ResourceReadContext;     // ->uri, ->variables (RFC 6570), ->uriTemplate (null = static), ->session, ->clientId
+use Rasuvaeff\Mcp\Interceptor\ResourceReadInterceptorInterface;
+use Rasuvaeff\Mcp\Visibility\PromptVisibilityInterface;    // isVisible(Prompt, ?Session)
+use Rasuvaeff\Mcp\Visibility\ResourceVisibilityInterface;  // isVisible(ResourceDefinition, ?Session) + isTemplateVisible(ResourceTemplate, ?Session)
+
+// params (all DI-resolved; interceptor lists first = outermost):
+// 'prompt_interceptors' => [...], 'resource_interceptors' => [...],
+// 'prompt_visibility' => FQCN|'', 'resource_visibility' => FQCN|''
+// Rejecting: throw Mcp\Server\Exception\PromptGetException / ResourceReadException
+//   => client sees the message.
+// Hiding: visibility (or throw PromptNotFoundException/ResourceNotFoundException)
+//   => "not found", indistinguishable from a missing capability; the call never
+//   reaches interceptors or the handler. Visibility also filters prompts/list,
+//   resources/list and resources/templates/list with the SAME implementation.
+// Manual wiring: $factory->create($tools, $configurators, $interceptors,
+//   $toolVisibility, $promptInterceptors, $resourceInterceptors,
+//   $promptVisibility, $resourceVisibility).
+
+// Shared outcome vocabulary for audit/telemetry bridges:
+use Rasuvaeff\Mcp\Interceptor\CallOutcome;   // Success|Rejected|Error ('success'/'rejected'/'error')
+CallOutcome::fromThrowable($e);   // ToolCallException/PromptGetException/ResourceReadException
+                                  // => Rejected; anything else => Error
+```
+
+- `completion/complete` (argument autocompletion via `#[CompletionProvider]`
+  on a prompt argument or resource-template variable) is served by the SDK
+  DIRECTLY off the registry, bypassing the reference handler. yii3-mcp
+  decorates it so the configured `prompt_visibility` / `resource_visibility`
+  applies: a hidden prompt/template answers "not found", byte-identical to a
+  missing one. Interceptors still do NOT wrap completion — it is a metadata
+  lookup, not a capability call.
+
+### Multi round-trip calls (stateless 2026-07-28 era)
+
+- `ClientGateway::elicit()`/`elicitUrl()` in a handler: the request ends with
+  `resultType: input_required` + `inputRequests`; the client re-sends the call
+  with `inputResponses` (+ `requestState`) and the handler RUNS AGAIN FROM THE
+  TOP — side effects before the last ask repeat per round.
+- More than one ask per call needs params
+  'request_state' => ['key' => <>= 32 bytes, from env>, 'ttl' => 600,
+  'previous_keys' => [], 'bind' => true];
+  without a key the second ask fails the call. `previous_keys` still verify
+  but never sign (rotation without failing calls in flight; keys without a
+  current one fail the build). `bind` (default true) ties a state to its
+  originating request (method, tool, argument digest, OAuth principal) and to
+  the client id: a replay by another client or with other arguments fails.
+- Every round is a tools/call: interceptors run and the tool-call budget counts
+  each round (one ask = two units). The result cache skips asks and retries.
+- `sample()`/`listRoots()` throw on 2026-07-28 (deprecated: SEP-2577).
+- Testing: McpTester(..., ProtocolVersion::V2026_07_28, new ClientCapabilities(elicitation: true));
+  first callTool() returns the input_required result; answer with
+  $tester->request('tools/call', ['name' => …, 'arguments' => …, 'inputResponses' => ['key' => ['action' => 'accept', 'content' => […]]]]).
+
+### Stateless-era extras
+
+- Interceptor contexts (`ToolCallContext`, `PromptGetContext`,
+  `ResourceReadContext`) carry `?Mcp\Server\RequestContext $requestContext`:
+  `->getClientGateway()->elicit(...)` asks the user before the call (works for
+  OpenAPI-bridged tools too; interceptors outside it run once per round),
+  `->getTraceContext()` = caller's traceparent/tracestate/baggage.
+- `$context->isStateless()`: true on the 2026-07-28 era, where `$context->session`
+  is a per-request throwaway — its id names nothing, nothing in it survives.
+- params 'cache_policy' => ['ttl_ms' => 0, 'scope' => 'private'|'public',
+  'methods' => ['tools/list' => ['ttl_ms' => 300000, 'scope' => 'private']]]
+  (cacheable: server/discover, tools/list, prompts/list, resources/list,
+  resources/templates/list, resources/read; unknown method/scope = config-load
+  error; 'public' on a list/read + any visibility filter = build error).
+- `ResourceLink` content passes through result_json compact untouched.
+- mcp:doctor `protocol_eras` check; the stateless budget and a psr16 bus add
+  `Psr\SimpleCache\CacheInterface` to the required services, a psr6 bus adds
+  `Psr\Cache\CacheItemPoolInterface`.
