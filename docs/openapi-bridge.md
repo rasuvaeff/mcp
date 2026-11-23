@@ -112,38 +112,124 @@ by identity, below the client-id level.
 
 ## Dry run
 
-Operations listed in `dry_run` get an extra `dryRun` boolean input argument;
-a call with `dryRun: true` returns the planned request (method, url, body)
-as a plain string instead of executing it — never as `structuredContent`,
-so it can never contradict the operation's declared `outputSchema`, and
-never including headers, since those may carry server-side credentials the
-caller never supplied. Orthogonal to `safe_methods_only` — it does not
-expose an operation the safety gate would otherwise reject, and a client
-cannot smuggle `dryRun: true` into a non-`dry_run`-enabled operation to get
-a preview instead of a real call.
+```php
+'rasuvaeff/yii3-mcp' => [
+    'openapi' => [
+        // operationIds that get an extra `dryRun` boolean argument
+        'dry_run' => ['createSubscriber'],
+    ],
+],
+```
+
+A dry-run-enabled operation's `inputSchema` gains a `dryRun: boolean`
+argument. Calling the tool with `dryRun: true` returns the request that
+*would* be sent (`operationId`, `method`, `url`, `body`) as text — never as
+`structuredContent`, so it never conflicts with the operation's declared
+`outputSchema` — without sending it, and without any upstream credentials
+leaving the process (headers are never included in the preview). The flag is
+checked twice, fail-closed: an operationId absent from `dry_run` ignores a
+`dryRun` argument entirely and always executes for real, even if a client
+sends it anyway. On a dry-run-enabled operation a non-boolean `dryRun`
+value (`1`, `"true"`) is rejected with an error instead of being executed —
+a malformed flag must never turn an intended preview into a real call.
+
+Dry-run is orthogonal to `safe_methods_only`: it does not expose an operation
+the safety gate would otherwise reject — a write operation still needs
+`safe_methods_only: false` (or omitted) to be exposed at all, dry-run or not.
+A dry-run call still passes through the full interceptor chain (session
+budget, RBAC/audit, caching, size limit) like any other call — previewing a
+write action requires the same permission as actually calling it.
+
+## In-process execution
+
+When `base_url` points at the application itself, every bridged call is a
+real HTTP request back into the same process pool: under php-fpm one call
+occupies two workers (the MCP request waits for the nested one) and can
+starve a small `pm.max_children`, on top of loopback TLS/DNS configuration
+and per-call latency. `executor => 'psr15'` removes the network from the
+path entirely:
+
+```php
+'openapi' => [
+    // ...
+    'executor' => 'psr15',
+    // Psr\Http\Server\RequestHandlerInterface FQCN, resolved through the DI
+    // container — the application's own handler (typically the console
+    // application's). Required for psr15 mode.
+    'handler' => App\RequestHandler::class,
+    // optional: OpenApi\ExecutionRequestAttributesInterface FQCN — maps the
+    // resolved ExecutionIdentity to request attributes on the nested
+    // request, so the stack authenticates the user behind the MCP client
+    // the usual way (delegated headers are still sent as headers)
+    'request_attributes' => App\ExecutionRequestAttributes::class,
+    // optional: OpenApi\InProcessScopeInterface FQCN — enter()/leave() hooks
+    // the executor runs around the nested handle()
+    'in_process_scope' => App\InProcessScope::class,
+],
+```
+
+The nested request carries the same method, URI (`base_url` + substituted
+path + query), headers (configured defaults, delegated ones, `Accept`,
+`Content-Type`) and JSON body the HTTP executor would send; the response
+goes through the same incremental size cap, error mapping and
+`opaque_errors` handling. `base_url` keeps shaping the request URI and the
+dry-run preview — nothing leaves the process, and the PSR-18 client is only
+touched by a URL `spec_path` fetch.
+
+Two contracts are the application's to honour:
+
+- **`handler` is responsible for its own re-entrancy.** The outer MCP
+  request's scoped state — current route, current user, a URI already set
+  on the shared request — is still in place when the nested request runs;
+  re-entering the Yii3 stack naively fails with `Can not set URI since it
+  was already set` or, far worse, serves the nested call under the outer
+  request's identity. Reset what your stack globalizes in
+  `InProcessScopeInterface::enter()` and restore it in `leave()`; the
+  executor calls `leave()` in a `finally`, so it runs even when the nested
+  call throws, and a stateless scope implementation may be shared.
+- **delegated mode keeps working**: the delegated header provider's output
+  arrives as headers, and `request_attributes` (when configured) adds the
+  identity as attributes — both derive from the SAME per-call identity
+  resolution.
+
+Misconfiguration fails the server build: `psr15` without `handler`, any of
+the three psr15-only keys in `http` mode, or an unsupported `executor`
+value. `mcp:doctor` reflects the mode — it requires the PSR-17
+server-request factory and the configured handler instead of the PSR-18
+client for operation execution.
 
 ## Building the bridge by hand
 
-`OpenApi\OpenApiBridgeFactory::create()` returns a configured
-`OpenApiServerConfigurator` from what any consumer already has:
+The bridge is a package feature, not an application one: `OpenApiBridgeFactory`
+builds a ready configurator from what any consumer already has, so nothing
+`@internal` has to be reached for.
 
 ```php
-OpenApiBridgeFactory::create(
-    spec: __DIR__ . '/openapi.json',   // path, http(s) URL, or a decoded document
-    baseUrl: 'https://api.example.com',
-    httpClient: $httpClient,
-    requestFactory: $psr17,
-    streamFactory: $psr17,
-    operations: ['getBlogTags'],
-    headers: ['Authorization' => 'Bearer ' . $token],
-);
+use Rasuvaeff\Mcp\OpenApi\OpenApiBridgeFactory;
+
+$server = (new McpServerFactory($container, $sessionStore))->create([], [
+    OpenApiBridgeFactory::create(
+        spec: __DIR__ . '/openapi.json',   // path, http(s) URL, or a decoded document
+        baseUrl: 'https://api.example.com',
+        httpClient: $httpClient,           // PSR-18
+        requestFactory: $psr17,            // PSR-17
+        streamFactory: $psr17,
+        operations: ['getBlogTags'],
+        headers: ['Authorization' => 'Bearer ' . $token],
+        safeMethodsOnly: true,
+        toolNames: ['getBlogTags' => 'blog_tags_list'],
+    ),
+]);
 ```
 
-`SpecIndex` and `HttpOperationExecutor` remain `@internal` — the factory
-constructs them itself, so a consumer outside `Rasuvaeff\` never references an
-internal class and their constructors stay free to change.
-`McpServerComponentResolver` calls the same factory, so the config-plugin path
-and a standalone server assemble the bridge through one code path.
+A URL spec is fetched with `specHeaders` (its own credential scope) and cached
+through `specCache` when `specCacheTtl` is above zero. Every other option the
+`openapi` params carry — `modifier`, `dryRunOperations`, `identityProvider`,
+`delegatedHeaderProvider`, `maxResponseBytes`, `opaqueErrors`,
+`multiSegmentPathParams`, and the in-process quartet `inProcessHandler`,
+`serverRequestFactory`, `requestAttributes`, `inProcessScope` — is a named
+argument here. The config-plugin path calls this same factory, so both
+assemble the bridge identically.
 
 ## A failing bridged call names the tool, not the operationId
 
@@ -186,28 +272,79 @@ argument.
 
 ### Array-valued query parameters
 
-List/search operations take array filters. A `type: array` parameter in
-`in: query` becomes an array tool argument; `items`, `enum`, `minItems` and
-`maxItems` are kept in the input schema and checked again by the executor before
-the request is built. Items must be scalars; arrays in a path segment, object or
-nested-array items, a `style` other than `form` and `allowReserved: true` fail
-the server build.
+List/search operations take array filters (`regions`, `platforms`, `niches`).
+A `type: array` parameter in `in: query` is bridged as an array argument: the
+tool's input schema keeps `items`, `enum`, `minItems` and `maxItems` exactly as
+the spec declares them, and the executor validates them again before sending
+(a direct caller cannot smuggle an oversized or non-scalar array past the
+SDK's schema check). Items must be scalars — objects and nested arrays fail the
+server build, as do arrays in a path segment; `style` other than `form` and
+`allowReserved: true` fail it too.
 
-The wire format is configurable because applications disagree on it:
+The wire format is the application's contract, so it is configurable. With the
+default (`array_query_style` empty) each parameter follows its own declared
+`explode`: `explode: false` is written `name=a,b`, anything else repeats the
+key (`name=a&name=b`, the OpenAPI default). PHP applications that read arrays
+as `name[]=a&name[]=b` set `array_query_style` to `brackets` — a plain repeated
+key is read back by PHP's `parse_str` as the LAST value only. `array_query_params`
+overrides the style for one parameter of one operation; an unknown style fails
+the server build. An empty array sends nothing (an empty filter constrains
+nothing); `minItems` rejects it before the call. The same options exist on
+`OpenApiBridgeFactory::create()` as `arrayQueryStyle` and `arrayQueryParams`.
 
-```php
-'openapi' => [
-    // 'repeat' name=a&name=b (OpenAPI default) | 'brackets' name[]=a&name[]=b | 'comma' name=a,b
-    // empty = per parameter from its declared `explode` (false => comma, else repeat)
-    'array_query_style' => 'brackets',
-    // operationId => parameter => style; wins over array_query_style
-    'array_query_params' => ['getCreators' => ['platforms' => 'comma']],
-],
-```
+A parameter listed in `multi_segment_path_params` may carry that many
+`"/"`-separated segments — for an upstream that identifies a resource by a
+nested path and accepts it percent-encoded (GitLab takes `group/project` as
+`group%2Fproject`). The opt-in buys the separator and nothing else: `..`, a
+backslash, an empty value and a bare `.` stay rejected, every segment must
+match `[A-Za-z0-9_][A-Za-z0-9_.-]*`, and the limit must be an integer from 1
+to 20 — a string, float or out-of-range value fails at server build time. Opt a parameter in deliberately — the value comes from the MCP client,
+and a multi-segment value no longer keeps the request on the allow-listed
+route (`1/repository/archive` under `/projects/{id}` reaches an operation the
+allow-list never exposed). The segment cap is what bounds that, so keep it as
+low as the upstream's real nesting depth. The base URL must not
+embed credentials (userinfo) or carry a query string/fragment — dry-run
+previews return the full URL to the caller, so the base URL is never allowed
+to be a credential carrier. Fixed upstream headers belong in `headers`/
+`HttpOperationExecutor::defaultHeaders`. **Bridged operations execute with the
+configured upstream credentials. The upstream API does not automatically
+inherit the MCP caller identity or RBAC decision. Do not expose user/tenant-
+scoped operations with a broader service token.**
 
-PHP applications that read `?platforms[]=a&platforms[]=b` need `brackets`: PHP's
-`parse_str` keeps only the last value of a plain repeated key. An empty array
-sends nothing (an empty filter constrains nothing); `minItems` rejects it first.
+For delegated authorization configure both `identity_provider` and
+`delegated_header_provider`. The first returns an immutable
+`ExecutionIdentity`; the second exchanges it for headers on every operation
+call and receives only operation id/method/path plus that identity, never the
+raw MCP shared secret. Do not forward the inbound `Authorization` header
+verbatim. Provider failures stop the call before HTTP (fail-closed), and
+dynamic headers override matching static headers without cross-call reuse.
+
+Duplicate `operationId` values also fail while indexing the document.
+Tool arguments are keyed by name, so an operation with a
+path and a query parameter sharing one name — or a parameter named `body`
+alongside a request body — cannot be bridged and throws
+`InvalidSpecException` at build time.
+
+Resource bounds are enforced **before** allocation, not after: the upstream
+response body is read incrementally and the call fails the moment it crosses
+`max_response_bytes` (an advertised `Content-Length` over the cap is rejected
+without reading at all); JSON decoding is depth-capped; the OpenAPI document
+itself is size-bounded (10 MiB) for URL and file sources alike, and `$ref`
+inlining runs under an explicit depth + node budget, so a hostile or
+degenerate remote spec cannot make indexing recurse or allocate without
+bound. Upstream error bodies are excerpted (bounded, UTF-8-safe) into the
+tool error — or suppressed entirely with `opaque_errors` when upstream error
+details are not the MCP caller's to see.
+
+An `operationId` that cannot serve as an MCP tool name (space, unicode,
+over 64 characters — `^[A-Za-z0-9._/-]{1,64}$`) throws `InvalidSpecException`
+when the operation is selected; `mcp/sdk` itself only logs a warning and
+would otherwise register the tool anyway, surfacing only as an opaque
+`tools/list` rejection on the client. A `null` argument for a path or query
+parameter is treated the same as an omitted one (skipped, not sent as an
+empty value) — matching OpenAPI 3.1's nullable union notation
+(`{"type": ["string", "null"]}`) on scalar parameter schemas, which the
+bridge accepts alongside the plain 3.0 type string.
 
 ### Multi-segment path arguments are opt-in, per parameter
 

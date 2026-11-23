@@ -23,6 +23,7 @@ const sidebar = [
         ],
     },
     { text: 'Operations', link: '/operations' },
+    { text: 'Testing', link: '/testing' },
     {
         text: 'Yii3',
         items: [

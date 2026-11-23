@@ -95,14 +95,48 @@ never silently adoptable. Deployments without client identity
 
 ## Sessions on disk
 
-The MCP Streamable HTTP session spans several requests, so this package
-defaults `SessionStoreInterface` to `Session\PrivateFileSessionStore` —
-file-based (FPM-safe, unlike the SDK's in-memory default) and owner-only:
-the directory is created `0700` (application-specific, under
-`sys_get_temp_dir()`, derived from `server_name`; override via
-`session.dir`) and every session file is clamped to `0600`, because session
-JSON carries client metadata and everything needed to replay a session id.
-For multi-host setups, rebind the interface to a shared PSR-16-backed store.
+The MCP Streamable HTTP session spans several HTTP requests (`initialize`
+first, then `tools/call` with the returned `Mcp-Session-Id`). The SDK's
+default in-memory store would lose the session between FPM workers, so this
+package **defaults to a file-based store** — the shipped
+`Session\PrivateFileSessionStore` keeps it owner-only: the directory is
+created `0700` (an application-specific default under `sys_get_temp_dir()`,
+derived from `server_name`; override via `session.dir`) and every session
+file is clamped to `0600`, because session JSON carries client metadata and
+everything needed to replay a session id. For multi-host setups rebind the
+interface:
+
+```php
+// config/common/di/mcp.php
+use Mcp\Server\Session\Psr16SessionStore;
+use Mcp\Server\Session\SessionStoreInterface;
+
+return [
+    SessionStoreInterface::class => static fn (CacheInterface $cache) =>
+        new Psr16SessionStore($cache),
+];
+```
+
+### Sessions are bound to the client that created them
+
+The SDK itself only checks that a presented `Mcp-Session-Id` exists — any
+authenticated client could otherwise act inside (or `DELETE`) another
+client's session by replaying its id, which leaks into proxy and client
+logs via the HTTP header. When `client_secrets` (or `endpoint_secret`) is
+configured, `McpAction` stamps the resolved client id into the session as an
+**immutable owner at `initialize`** and verifies it on every `POST`/`DELETE`
+before the transport runs. A foreign — or ownerless — session is answered
+with the same 404 the SDK uses for a missing one, indistinguishable from an
+expired session. Deployments without client identity (network-ACL-only) are
+unaffected.
+
+Since SDK 0.10 the SDK binds a handshake-era session to its **principal** as
+well: `McpAction` hands it the resolved client id
+(`StreamableHttpTransport::PRINCIPAL_ATTRIBUTE`, unless a front middleware
+such as `BearerTokenMiddleware` already set one), so a foreign client is
+refused even where the package's own guard is inert (no session store passed
+to `McpAction`). A session opened before the upgrade carries no principal and
+is answered 404 once; the client simply initializes again.
 
 ## Capability name collisions
 

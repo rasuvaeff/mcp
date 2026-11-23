@@ -104,15 +104,25 @@ for authorization, validation, `safe_methods_only`
 ### Server-initiated communication
 
 An attribute tool may accept the SDK's request-scoped `RequestContext` as a
-parameter — the SDK creates it per MCP request and omits it from the
-generated input schema:
+parameter. The SDK creates it for the current MCP request and omits it from the
+generated input schema, so the client supplies only real domain arguments.
+Obtain its `ClientGateway` to send progress/log notifications or to initiate
+sampling and elicitation:
 
 ```php
+use Mcp\Schema\Elicitation\BooleanSchemaDefinition;
+use Mcp\Schema\Elicitation\ElicitationSchema;
 use Mcp\Server\RequestContext;
 
-#[McpTool(name: 'release.deploy', annotations: new ToolAnnotations(
-    readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false,
-))]
+#[McpTool(
+    name: 'release.deploy',
+    annotations: new ToolAnnotations(
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+    ),
+)]
 public function deploy(string $version, RequestContext $context): string
 {
     $client = $context->getClientGateway();
@@ -122,9 +132,20 @@ public function deploy(string $version, RequestContext $context): string
         throw new RuntimeException('Client does not support required deployment confirmation');
     }
 
-    $confirmation = $client->elicit(/* … */);
+    $confirmation = $client->elicit(
+        message: sprintf('Deploy version %s?', $version),
+        requestedSchema: new ElicitationSchema(
+            properties: [
+                'confirmed' => new BooleanSchemaDefinition(
+                    title: 'Confirm deployment',
+                    description: 'Allow this deployment to proceed',
+                ),
+            ],
+            required: ['confirmed'],
+        ),
+    );
 
-    if (!$confirmation->isAccepted()) {
+    if (!$confirmation->isAccepted() || ($confirmation->content['confirmed'] ?? false) !== true) {
         throw new RuntimeException('Deployment was not confirmed');
     }
 
@@ -132,11 +153,72 @@ public function deploy(string $version, RequestContext $context): string
 }
 ```
 
-`progress()` is a no-op when the caller supplied no progress token; `log()`
-emits client-visible log notifications; `sample()` and `elicit()` suspend the
-tool's Fiber until the client responds or the SDK times out. Check
-`supportsElicitation()` before requiring it, and keep `RequestContext` as a
-method parameter, not a constructor dependency — it belongs to one request.
+`progress()` is a no-op when the caller did not provide a progress token.
+`log()` emits client-visible log notifications; `sample()` and `elicit()` are
+round trips that suspend the tool Fiber until the client responds or the SDK
+timeout expires. Check `supportsElicitation()` before requiring elicitation,
+choose a fail-closed fallback for destructive operations, and assume that not
+every MCP client supports every server-initiated capability. Keep
+`RequestContext` as a method parameter rather than a constructor dependency:
+it belongs to one request/session.
+
+On the stateless 2026-07-28 era there is nobody to ask while the request is
+open, so an ask works differently — and the same handler serves both eras
+unchanged:
+
+- `elicit()`/`elicitUrl()` end the request with `resultType: input_required`;
+  the client re-sends the call with the answer and the SDK **runs the handler
+  again from the top**, where the ask now returns it. Anything a handler does
+  before its last ask happens once per round — keep side effects after it.
+- More than one ask per call carries earlier answers between rounds in a
+  signed `requestState`: set `request_state.key` (at least 32 bytes, from the
+  environment). Without it the first ask works and a second fails the call.
+- The state is **bound** (`request_state.bind`, on by default) to the request
+  it was minted for — method, tool, a digest of the arguments, the OAuth
+  principal — and to the resolved client id: a state replayed by another
+  client, or for other arguments, does not verify. States minted before the
+  binding was switched on stop verifying once.
+- **Rotation**: move the old key to `request_state.previous_keys` when setting
+  a new `key` — previous keys still verify a state but never sign one, so
+  calls in flight survive the switch; drop the old key after `ttl`.
+- Every round is a `tools/call`: interceptors run each round and the
+  tool-call budget counts each one (one ask costs two). The answers are not
+  signed, so a budget skipping "retries" could be bypassed by any client.
+- The result cache never stores an ask or serves a later round.
+- `sample()`/`listRoots()` throw on 2026-07-28, which removed them (Sampling,
+  Roots and Logging are deprecated by SEP-2577).
+- `progress()`/`log()` stream over SSE when the client accepts
+  `text/event-stream`.
+
+```php
+'rasuvaeff/yii3-mcp' => [
+    'request_state' => [
+        'key' => $_ENV['MCP_REQUEST_STATE_KEY'] ?? '',
+        'ttl' => 600,
+        'previous_keys' => [],   // old keys during a rotation
+        'bind' => true,          // tie a state to its request and client
+    ],
+],
+```
+
+To gate a capability class (feature flag, environment check), implement
+`ConditionalToolInterface` — the instance is resolved through the container
+at build time and skipped when `shouldRegister()` returns `false`:
+
+```php
+final readonly class BetaTools implements ConditionalToolInterface
+{
+    public function __construct(private FeatureFlags $flags) {}
+
+    public function shouldRegister(): bool
+    {
+        return $this->flags->isEnabled('mcp-beta-tools');
+    }
+
+    #[McpTool(name: 'beta.op')]
+    public function betaOp(): string { ... }
+}
+```
 
 ### Conditional registration
 
@@ -167,11 +249,8 @@ public methods on a DI-resolved service, returning resource contents.
 
 ### Subscriptions
 
-The SDK advertises `resources.subscribe` whenever the server has any
-resource and records `resources/subscribe` per session, but nothing emits
-`notifications/resources/updated` on its own. The tool that *causes* a
-change sends it, inside the same request, through
-`Resource\ResourceUpdateNotifier`:
+Subscribers are reached differently on the two protocol eras, and
+`Resource\ResourceUpdateNotifier` covers both from one call:
 
 ```php
 public function __construct(private ResourceUpdateNotifier $notifier) {}
@@ -180,18 +259,37 @@ public function __construct(private ResourceUpdateNotifier $notifier) {}
 public function cancel(string $orderId, RequestContext $context): string
 {
     $this->orders->cancel($orderId);
-    $this->notifier->notify($context, 'app://orders/' . $orderId);
+    $this->notifier->notify('app://orders/' . $orderId, $context);
 
     return 'cancelled';
 }
 ```
 
-`notify()` returns whether the caller was subscribed; a session that never
-subscribed is never sent anything, so an unsolicited notification can never
-appear on the wire. **Only the calling session is reached** — reaching other
-subscribers would need a connection this process does not hold, and under
-PHP-FPM nothing outlives the request. Clients that need to observe changes
-they did not cause must poll.
+| Era | Subscription | Who is reached |
+|---|---|---|
+| stateless 2026-07-28 | a `subscriptions/listen` stream, fed from the notification bus | every listener whose filter names the URI, from any process sharing the bus — `$context` is optional, so a queue worker or console command can notify too |
+| handshake | `resources/subscribe`, recorded in the caller's session | only the calling session, from inside the request that changed the resource — no process holds the other sessions' connections |
+
+```php
+'rasuvaeff/yii3-mcp' => [
+    'notifications' => [
+        // '' = none (listen streams carry nothing), 'psr16' / 'psr6' =
+        // through the container's PSR-16 cache / PSR-6 pool (PHP-FPM:
+        // publisher and listener are different workers), 'memory' = one
+        // process (stdio, persistent runtimes)
+        'bus' => 'psr16',
+        // seconds a listen stream is held open; under PHP-FPM it holds a worker
+        // that long — keep it below max_execution_time
+        'subscription_lifetime' => 30,
+    ],
+],
+```
+
+An unsolicited notification never reaches the wire: the session path checks
+the subscription first, and a listen stream carries only the URIs its own
+filter asked for. Bind a custom `Mcp\Server\Resource\SubscriptionManagerInterface`
+and both the subscribe handler and the notifier follow it; the bus is bound
+once, so `McpServerFactory` and the notifier always share it.
 
 ## Argument autocompletion (`completion/complete`)
 
@@ -242,3 +340,29 @@ visibility filter, never in an interceptor.
 prompts`), both the SDK's own handlers and this package's filtering ones —
 so paging can never differ depending on whether visibility is configured.
 See [Protocol](/protocol#protocol-revisions) for `protocol_version`.
+
+## Server configurators
+
+Beyond the built-in OpenAPI bridge, register your own
+`ServerConfiguratorInterface` implementations (or a companion package's) to
+contribute capabilities to the SDK server builder before it is built. The
+core resolves the FQCNs through the container (after its own configurators)
+and applies them in order:
+
+```php
+'rasuvaeff/yii3-mcp' => [
+    'configurators' => [MyServerConfigurator::class],   // DI-resolved
+],
+```
+
+```php
+final readonly class MyServerConfigurator implements ServerConfiguratorInterface
+{
+    #[\Override]
+    public function configure(Builder $builder): void
+    {
+        // $builder->addTool(...) / addResource(...) / addPrompt(...) …
+    }
+}
+```
+

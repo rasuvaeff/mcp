@@ -17,31 +17,68 @@ prompts, and resources a given session may see and call.
 
 ## Declarative tool visibility
 
-The typical case — no code, just name patterns:
+`ConditionalToolInterface` gates registration globally at build time. To hide
+a subset of the registered tools from the endpoint, the typical case is
+declarative — tool-name patterns in params, `*` matching any run of
+characters:
 
 ```php
 'rasuvaeff/yii3-mcp' => [
     'visibility' => [
-        'deny' => ['admin.*'],   // hide matches
-        'allow' => [],           // non-empty = hide everything it does not match
+        'deny' => ['admin.*'],        // hide matches
+        'allow' => [],                // non-empty = hide everything it does not match
     ],
 ],
 ```
 
-`*` matches any run of characters. A `tag:` prefix matches the tool's
-**tags** instead of its name — the [OpenAPI bridge](/openapi-bridge)
-propagates OpenAPI `tags` into the tool's `_meta`, so `'deny' =>
-['tag:admin']` hides every bridged operation tagged `admin` regardless of
-its served name. A tool with no tags never matches a `tag:` pattern. Deny
-wins over allow; both lists empty (the default) means every tool is
-visible.
+A `tag:` prefix matches against the tool's tags instead of its name — the
+OpenAPI bridge propagates OpenAPI `tags` into the tool's `_meta`, so
+`'deny' => ['tag:admin']` hides every bridged operation tagged `admin`
+regardless of its `operationId`/`tool_names` name. A tool with no tags never
+matches a `tag:` pattern.
 
-> **Trust boundary on `tag:` deny rules.** Tags come from the OpenAPI
-> document. Over a URL spec, a document that drops the `admin` tag disarms
-> a `deny: ['tag:admin']` rule — exposure stays bounded by the `operations`
-> allow-list, but the deny rule itself is only as trustworthy as the spec
-> source. Prefer name patterns for deny rules over a remote spec; keep
-> `tag:` for allow-listing and for local spec files.
+Note where a tag comes from: the OpenAPI document. With a URL spec
+(`openapi.spec_path` pointing at http(s)), a document that drops the `admin`
+tag disarms a `deny: ['tag:admin']` rule — the exposure stays bounded by your
+`operations` allow-list, but the deny rule itself is only as trustworthy as
+the spec source. Prefer name patterns for deny rules over a remote spec, and
+keep `tag:` for allow-listing and for local spec files.
+
+Deny wins over allow; both lists empty (the default) means every tool is
+visible. When the decision depends on the **session** (admin vs public
+client, tenant plans), implement `Visibility\ToolVisibilityInterface`
+instead — the decision runs per session, against the handshake data:
+
+```php
+use Mcp\Schema\Tool;
+use Mcp\Server\Session\SessionInterface;
+use Rasuvaeff\Mcp\Visibility\ToolVisibilityInterface;
+
+final readonly class PlanBasedVisibility implements ToolVisibilityInterface
+{
+    public function isVisible(Tool $tool, ?SessionInterface $session): bool
+    {
+        // decide from $session->get('client_info'), tenant data, …
+        return !str_starts_with($tool->name, 'admin.') || $this->isAdmin($session);
+    }
+}
+```
+
+```php
+'rasuvaeff/yii3-mcp' => [
+    'tool_visibility' => PlanBasedVisibility::class,   // DI-resolved
+],
+```
+
+The two kinds are mutually exclusive — configuring both is a build-time
+error. Either way the filter applies in two places, consistently:
+`tools/list` omits invisible tools, and `tools/call` **fail-closed** rejects
+them — a client that guesses a hidden name gets exactly the JSON-RPC error a
+missing tool gets (`-32602`, `Tool not found: "…"`, checked before the
+arguments are validated, so an invalid call does not reveal the schema
+either), and the call never reaches the interceptor chain or the tool. The
+same holds for hidden prompts, resources and completion refs. This is an early
+filter, not a replacement for application-level ACL.
 
 ## Per-session visibility
 
