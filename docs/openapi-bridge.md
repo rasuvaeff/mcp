@@ -124,10 +124,8 @@ by identity, below the client-id level.
 A dry-run-enabled operation's `inputSchema` gains a `dryRun: boolean`
 argument. Calling the tool with `dryRun: true` returns the request that
 *would* be sent (`operationId`, `method`, `url`, `body`) as text — without sending it, and without any upstream credentials
-leaving the process (headers are never included in the preview). On the handshake era the
-preview is never `structuredContent`; on the stateless 2026-07-28 era the SDK
-treats it as `structuredContent` when the operation advertises an
-`outputSchema`, and answers with a tool error. The flag is checked twice,
+leaving the process (headers are never included in the preview). The preview is text
+content on every protocol revision, never `structuredContent`. The flag is checked twice,
 fail-closed: an operationId absent from `dry_run` ignores a
 `dryRun` argument entirely and always executes for real, even if a client
 sends it anyway. On a dry-run-enabled operation a non-boolean `dryRun`

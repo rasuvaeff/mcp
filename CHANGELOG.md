@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed:** visibility sees the client id of the request on the stateless era: it
+  is resolved into the session before any filtered handler decides. It was null
+  there, so a per-client filter treated every stateless client as anonymous (#4).
+
 ## 0.1.0 — 2026-11-23
 
 - Initial package: the MCP server runtime extracted from `rasuvaeff/yii3-mcp`

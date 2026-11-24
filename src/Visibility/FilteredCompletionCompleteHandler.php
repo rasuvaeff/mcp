@@ -17,6 +17,7 @@ use Mcp\Server\Exception\PromptNotFoundException;
 use Mcp\Server\Exception\ResourceNotFoundException;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\SessionInterface;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 
 /**
  * completion/complete with per-session visibility — registered by
@@ -61,6 +62,8 @@ final readonly class FilteredCompletionCompleteHandler implements RequestHandler
     public function handle(Request $request, SessionInterface $session): Response|Error
     {
         \assert($request instanceof CompletionCompleteRequest);
+
+        SessionClient::resolve($session);
 
         $notFound = $this->notFoundMessage($request->ref, $session);
 

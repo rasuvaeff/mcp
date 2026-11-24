@@ -11,6 +11,7 @@ use Mcp\Schema\Result\ListResourceTemplatesResult;
 use Mcp\Server\Capability\RegistryInterface;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\SessionInterface;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 
 /**
  * resources/templates/list with per-session visibility filtering —
@@ -43,6 +44,8 @@ final readonly class FilteredListResourceTemplatesHandler implements RequestHand
     public function handle(Request $request, SessionInterface $session): Response
     {
         \assert($request instanceof ListResourceTemplatesRequest);
+
+        SessionClient::resolve($session);
 
         $page = $this->registry->getResourceTemplates($this->pageSize, $request->cursor);
 

@@ -66,9 +66,10 @@ echo "exit: $?"
 
 Exit codes are stable for scripting: `0` healthy, `2` config error, `3`
 storage error, `4` upstream error — the category of the **first** failing
-check (checks run root-causes-first). With OAuth or a
-network ACL instead of a secret, the `endpoint_secret` check still fails (exit
-`2`). Otherwise gate a deploy on this exit code directly rather than grepping the human-readable table, and remember the
+check (checks run root-causes-first). With OAuth
+configured the `endpoint_secret` check passes without a secret; for an endpoint
+protected outside the package set `external_auth` to skip it. Gate a deploy on
+this exit code directly rather than grepping the human-readable table, and remember the
 JSON output — like the table — never contains the configured secret or
 header values.
 

@@ -14,6 +14,7 @@ use Mcp\Server\Session\InMemorySessionStore;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
 use Psr\Http\Message\ResponseInterface;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 use Rasuvaeff\Mcp\Interceptor\ToolCallContext;
 use Rasuvaeff\Mcp\Interceptor\ToolCallInterceptorInterface;
 use Rasuvaeff\Mcp\McpAction;
@@ -34,6 +35,7 @@ use Yiisoft\Test\Support\Container\SimpleContainer;
  * client id must travel with the request itself.
  */
 #[Test]
+#[Covers(SessionClient::class)]
 #[Covers(McpAction::class)]
 final class InterleavedIdentityTest
 {

@@ -11,6 +11,7 @@ use Mcp\Schema\Result\ListToolsResult;
 use Mcp\Server\Capability\RegistryInterface;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\SessionInterface;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 
 /**
  * tools/list with per-session visibility filtering — registered by
@@ -42,6 +43,8 @@ final readonly class FilteredListToolsHandler implements RequestHandlerInterface
     public function handle(Request $request, SessionInterface $session): Response
     {
         \assert($request instanceof ListToolsRequest);
+
+        SessionClient::resolve($session);
 
         $page = $this->registry->getTools($this->pageSize, $request->cursor);
 

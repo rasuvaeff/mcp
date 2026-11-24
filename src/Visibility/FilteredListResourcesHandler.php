@@ -11,6 +11,7 @@ use Mcp\Schema\Result\ListResourcesResult;
 use Mcp\Server\Capability\RegistryInterface;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\SessionInterface;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 
 /**
  * resources/list with per-session visibility filtering — registered by
@@ -42,6 +43,8 @@ final readonly class FilteredListResourcesHandler implements RequestHandlerInter
     public function handle(Request $request, SessionInterface $session): Response
     {
         \assert($request instanceof ListResourcesRequest);
+
+        SessionClient::resolve($session);
 
         $page = $this->registry->getResources($this->pageSize, $request->cursor);
 
