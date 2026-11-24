@@ -11,6 +11,7 @@ use Mcp\Schema\Result\ListPromptsResult;
 use Mcp\Server\Capability\RegistryInterface;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\SessionInterface;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 
 /**
  * prompts/list with per-session visibility filtering — registered by
@@ -42,6 +43,8 @@ final readonly class FilteredListPromptsHandler implements RequestHandlerInterfa
     public function handle(Request $request, SessionInterface $session): Response
     {
         \assert($request instanceof ListPromptsRequest);
+
+        SessionClient::resolve($session);
 
         $page = $this->registry->getPrompts($this->pageSize, $request->cursor);
 

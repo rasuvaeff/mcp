@@ -10,6 +10,7 @@ use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
 use Psr\Http\Message\ResponseInterface;
 use Rasuvaeff\Mcp\Exception\SessionOwnershipException;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 use Rasuvaeff\Mcp\McpAction;
 use Rasuvaeff\Mcp\McpServerFactory;
 use Rasuvaeff\Mcp\SharedSecretMiddleware;
@@ -31,6 +32,7 @@ use Yiisoft\Test\Support\Container\SimpleContainer;
  * session by replaying its id.
  */
 #[Test]
+#[Covers(SessionClient::class)]
 #[Covers(McpAction::class)]
 #[Covers(SessionOwnershipException::class)]
 final class SessionOwnershipTest

@@ -58,8 +58,7 @@ so the resolved client id is always `null`.
 
 The resolved client id is what interceptors see as `ToolCallContext::$clientId`
 (see [Interceptors](/interceptors)), what a [visibility](/visibility)
-implementation can branch on via the session on the handshake era (on the
-stateless era the session carries no client id when visibility runs), and what gets stamped into the
+implementation can branch on via the session, on both protocol eras, and what gets stamped into the
 session as its immutable owner — see below. See
 [Cookbook: rotating the shared secret](/cookbook/secret-rotation) for the
 rotation procedure end to end.

@@ -9,6 +9,7 @@ use Mcp\Server\Authorization\AccessToken;
 use Mcp\Server\Session\InMemorySessionStore;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 use Rasuvaeff\Mcp\Interceptor\InterceptingReferenceHandler;
 use Rasuvaeff\Mcp\McpServerFactory;
 use Rasuvaeff\Mcp\Testing\McpTester;
@@ -24,6 +25,7 @@ use Yiisoft\Test\Support\Container\SimpleContainer;
  * see that carrier, or "has a token" would stop meaning OAuth.
  */
 #[Test]
+#[Covers(SessionClient::class)]
 #[Covers(InterceptingReferenceHandler::class)]
 #[Covers(McpServerFactory::class)]
 final class AccessTokenVisibilityTest

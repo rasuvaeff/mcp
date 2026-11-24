@@ -20,6 +20,7 @@ use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
 use Rasuvaeff\Mcp\Exception\SessionOwnershipException;
 use Rasuvaeff\Mcp\Identity\RequestIdentity;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 use Rasuvaeff\Mcp\Interceptor\InterceptingReferenceHandler;
 use Rasuvaeff\Mcp\Interceptor\ToolCallInterceptorInterface;
 use Rasuvaeff\Mcp\McpServerFactory;
@@ -45,6 +46,7 @@ use Yiisoft\Test\Support\Container\SimpleContainer;
 use function Rasuvaeff\Understudy\when;
 
 #[Test]
+#[Covers(SessionClient::class)]
 #[Covers(InterceptingReferenceHandler::class)]
 final class InterceptingReferenceHandlerTest
 {

@@ -14,6 +14,7 @@ use Mcp\Server\Capability\RegistryInterface;
 use Mcp\Server\Exception\ToolNotFoundException;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\SessionInterface;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 
 /**
  * tools/call with per-session visibility — registered by McpServerFactory
@@ -55,6 +56,8 @@ final readonly class FilteredCallToolHandler implements RequestHandlerInterface
     public function handle(Request $request, SessionInterface $session): Response|Error
     {
         \assert($request instanceof CallToolRequest);
+
+        SessionClient::resolve($session);
 
         // an unknown tool is left to the inner handler, which produces the
         // canonical error — "not found" is phrased in one place only

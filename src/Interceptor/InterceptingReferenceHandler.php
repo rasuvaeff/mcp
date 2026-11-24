@@ -8,7 +8,6 @@ use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Schema\JsonRpc\Request;
 use Mcp\Schema\Result\CallToolResult;
 use Mcp\Schema\Result\InputRequiredResult;
-use Mcp\Server\Authorization\AccessToken;
 use Mcp\Server\Capability\Registry\ElementReference;
 use Mcp\Server\Capability\Registry\PromptReference;
 use Mcp\Server\Capability\Registry\ReferenceHandlerInterface;
@@ -21,7 +20,7 @@ use Mcp\Server\Exception\ToolCallException;
 use Mcp\Server\RequestContext;
 use Mcp\Server\Session\SessionInterface;
 use Rasuvaeff\Mcp\Exception\SessionOwnershipException;
-use Rasuvaeff\Mcp\Identity\RequestIdentity;
+use Rasuvaeff\Mcp\Identity\SessionClient;
 use Rasuvaeff\Mcp\ToolResultTextFormatter;
 use Rasuvaeff\Mcp\Visibility\PromptVisibilityInterface;
 use Rasuvaeff\Mcp\Visibility\ResourceVisibilityInterface;
@@ -44,12 +43,11 @@ use Rasuvaeff\Mcp\Visibility\ToolVisibilityInterface;
  *
  * The client identity of a call comes FROM THE SESSION first
  * ({@see self::CLIENT_ID_SESSION_KEY} — the immutable owner
- * {@see \Rasuvaeff\Mcp\McpAction} stamps at `initialize`), so it travels
- * with the request instead of through process state and stays correct even in
- * a concurrent (Fiber-interleaving) runtime. The process-local
- * {@see RequestIdentity} is only the fallback for sessions that carry
- * no owner yet (a pre-ownership session, an embedding without McpAction) —
- * in that case the id is mirrored into the session on first use. When both
+ * {@see \Rasuvaeff\Mcp\McpAction} stamps at `initialize`), then
+ * from the request itself ({@see \Rasuvaeff\Mcp\Identity\RequestIdentity})
+ * when the session carries no owner — always so on the stateless era; the id
+ * is then mirrored into the session on first use. Neither is process state,
+ * so both stay correct in a Fiber-interleaving runtime. When both
  * are present and DISAGREE, the call fails closed with
  * {@see SessionOwnershipException}: a session must never be re-attributed to
  * another client. This check runs before visibility, so a foreign session is
@@ -123,7 +121,7 @@ final readonly class InterceptingReferenceHandler implements ReferenceHandlerInt
         $session = $this->session($arguments);
         // identity first, visibility second: a foreign session must be
         // rejected before it is consulted for what the caller may see
-        $clientId = $this->clientId($session);
+        $clientId = SessionClient::resolve($session);
 
         if ($this->visibility instanceof ToolVisibilityInterface && !$this->visibility->isVisible($reference->tool, $session)) {
             throw new ToolCallException(sprintf('Tool "%s" is not available in this session', $reference->tool->name));
@@ -196,7 +194,7 @@ final readonly class InterceptingReferenceHandler implements ReferenceHandlerInt
     private function handlePrompt(PromptReference $reference, array $arguments): mixed
     {
         $session = $this->session($arguments);
-        $clientId = $this->clientId($session);
+        $clientId = SessionClient::resolve($session);
 
         if ($this->promptVisibility instanceof PromptVisibilityInterface && !$this->promptVisibility->isVisible($reference->prompt, $session)) {
             throw new PromptNotFoundException($reference->prompt->name);
@@ -226,7 +224,7 @@ final readonly class InterceptingReferenceHandler implements ReferenceHandlerInt
     private function handleResource(ResourceReference|ResourceTemplateReference $reference, array $arguments): mixed
     {
         $session = $this->session($arguments);
-        $clientId = $this->clientId($session);
+        $clientId = SessionClient::resolve($session);
         /** @var mixed $rawUri */
         $rawUri = $arguments['uri'] ?? null;
         $uri = is_string($rawUri) ? $rawUri : '';
@@ -313,51 +311,5 @@ final readonly class InterceptingReferenceHandler implements ReferenceHandlerInt
         unset($arguments['_session'], $arguments['_request']);
 
         return $arguments;
-    }
-
-    /**
-     * The session's immutable owner wins; the client id the request itself
-     * carries ({@see RequestIdentity}) covers sessions with no recorded owner —
-     * always so on the stateless era — and is mirrored into the session on
-     * first use. An owner that DISAGREES with the current request's id fails
-     * closed: a session is never re-attributed.
-     */
-    private function clientId(?SessionInterface $session): ?string
-    {
-        if (!$session instanceof SessionInterface) {
-            return null;
-        }
-
-        /** @var mixed $token */
-        $token = $session->get(AccessToken::class);
-        $token = $token instanceof AccessToken ? $token : null;
-        $clientId = RequestIdentity::clientId($token);
-
-        // the carrier has done its job: from here on interceptors, visibility
-        // and the handler see the token the request really arrived with, so
-        // "has a token" keeps meaning OAuth
-        if ($clientId !== null) {
-            $session->set(AccessToken::class, RequestIdentity::originalToken($token));
-        }
-
-        /** @var mixed $stored */
-        $stored = $session->get(self::CLIENT_ID_SESSION_KEY);
-
-        if (is_string($stored)) {
-            if ($clientId !== null && $clientId !== $stored) {
-                throw new SessionOwnershipException(sprintf(
-                    'Session belongs to another client; refusing to serve client "%s"',
-                    $clientId,
-                ));
-            }
-
-            return $stored;
-        }
-
-        if ($clientId !== null) {
-            $session->set(self::CLIENT_ID_SESSION_KEY, $clientId);
-        }
-
-        return $clientId;
     }
 }
