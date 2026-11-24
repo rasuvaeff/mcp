@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Added:** `Configuration\ServerOptions` and `Configuration\ServerComponentResolver`:
+  the interpretation of the server params, moved here from `rasuvaeff/yii3-mcp` so that
+  every framework package reads the same keys.
+- **Changed:** conflicts with `opis/json-schema` below 2.6.2, which calls a function
+  deprecated in PHP 8.6.
+
 ## 0.1.1 — 2026-11-24
 
 - **Fixed:** visibility sees the client id of the request on the stateless era: it
