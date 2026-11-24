@@ -44,8 +44,9 @@ Every `tools/call` becomes one span:
 | `mcp.tool.argument.<name>` | one scalar attribute per argument: masked (`***`), stringified (arrays as JSON), truncated at 200 bytes |
 | `mcp.outcome` | `success` / `rejected` / `error` |
 | `mcp.client.id` | identity from the endpoint secret; absent on stdio |
-| `mcp.client.name` / `mcp.client.version` | client from the initialize handshake |
-| `mcp.session.id` | MCP session UUID |
+| `mcp.client.name` / `mcp.client.version` | client from `initialize` or the stateless request's `_meta` |
+| `mcp.session.id` | MCP session UUID (handshake era only) |
+| `mcp.caller.trace_id` / `mcp.caller.span_id` | caller's W3C context (stateless era, when valid) |
 | `mcp.session.calls_used` | tools/call count in this session (handshake era, when the tool-call budget is on) |
 | `mcp.session.budget_remaining` | remaining budget (when `sessionBudget` is configured) |
 | status | `Error` + recorded exception on failure; `Unset` on success |
@@ -59,7 +60,7 @@ attribute would be silently dropped by an OTel backend.
 ```php
 $interceptor = new TracingToolCallInterceptor(
     tracer: $tracer,                          // Rasuvaeff\Yii3Telemetry\TracerInterface
-    argumentMasker: new ArgumentMasker(),     // core's masker — default key list: password, secret, token, api_key, credit_card
+    argumentMasker: new ArgumentMasker(),     // core's masker — default key list: see Interceptors
     sessionBudget: 50,                        // optional: mirror your `tool_call_budget.calls` param
 );
 ```
@@ -122,7 +123,7 @@ invisible — shared with every other bridge, see
 [Bridges: a shared blind spot](/bridges/overview#a-shared-blind-spot-rejections-outside-the-chain).
 An exhausted budget looks like traffic dropping to zero — watch
 `mcp.session.budget_remaining` on the calls that *do* go through. A
-rejection classified `rejected` (RBAC denial, rate limit, tool-call budget) is
+rejection classified `rejected` (RBAC denial, rate limit) is
 distinct from `error` — alert on `outcome="error"` for crashes only.
 
 ## stdio mode (`mcp:serve`)
@@ -138,8 +139,7 @@ Arguments land on the span masked by field name (case-insensitive, at
 **every nesting level**) via the core's `Interceptor\ArgumentMasker` — see
 [Interceptors: masking sensitive arguments](/interceptors#masking-sensitive-arguments).
 Extend the key list via the constructor for application-specific fields.
-This differs from the [audit-log bridge](/bridges/audit-log)'s masking
-(field-name-only, not recursive) — see
+The [audit-log bridge](/bridges/audit-log) uses the same masker — see
 [Bridges: a shared helper](/bridges/overview#a-shared-helper-argumentmasker).
 
 ## Requirements
@@ -150,6 +150,6 @@ This differs from the [audit-log bridge](/bridges/audit-log)'s masking
 | `rasuvaeff/mcp` | `^0.1` |
 | `rasuvaeff/yii3-mcp` | `^6.0` in a Yii3 application |
 | `rasuvaeff/yii3-telemetry` | `^1.0` |
-| `rasuvaeff/yii3-metrics` | `^1.0` |
+| `rasuvaeff/yii3-metrics` | `^1.0 \|\| ^2.0` |
 
 Full class-by-class reference: [packages/telemetry-bridge](/packages/telemetry-bridge).

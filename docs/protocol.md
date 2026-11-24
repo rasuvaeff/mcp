@@ -45,8 +45,9 @@ the resolved client id is always `null` for interceptors and caching — see
 An MCP Streamable HTTP session spans several HTTP requests: `initialize`
 first, then `tools/call` (and friends) carrying the returned
 `Mcp-Session-Id`. The SDK's default in-memory session store would lose the
-session between PHP-FPM workers, so this package binds
-`Session\PrivateFileSessionStore` by default — file-based, owner-only
+session between PHP-FPM workers, so `rasuvaeff/yii3-mcp` binds
+`Session\PrivateFileSessionStore` by default (elsewhere pass it to
+`McpServerFactory` and `McpAction` yourself) — file-based, owner-only
 (`0700` directory, `0600` files), under an application-specific directory
 derived from `server_name`. For multi-host deployments, rebind
 `SessionStoreInterface` to a shared PSR-16-backed store

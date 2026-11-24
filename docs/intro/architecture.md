@@ -38,6 +38,7 @@ that turns application config into an `Mcp\Server\Builder`-built `Server`:
    of defense behind the reserved-names handshake in step 2.
 5. If any per-session visibility filter is configured, the corresponding
    `Filtered*Handler` (`Visibility\FilteredListToolsHandler`,
+   `FilteredCallToolHandler`,
    `FilteredListPromptsHandler`, `FilteredListResourcesHandler`,
    `FilteredListResourceTemplatesHandler`, and
    `FilteredCompletionCompleteHandler` when prompt or resource visibility is
@@ -59,7 +60,8 @@ Different entry points need different PSR services present in the container:
 | `McpAction` | `ResponseFactoryInterface`, `StreamFactoryInterface` |
 | `McpListCommand`, `McpTester` | `ServerRequestFactoryInterface`, `ResponseFactoryInterface`, `StreamFactoryInterface` |
 | URL OpenAPI spec | PSR-18 `ClientInterface`, PSR-17 `RequestFactoryInterface` |
-| OpenAPI operation execution | `ClientInterface`, `RequestFactoryInterface`, `StreamFactoryInterface` |
+| OpenAPI operation execution (HTTP) | `ClientInterface`, `RequestFactoryInterface`, `StreamFactoryInterface` |
+| OpenAPI operation execution (PSR-15) | `RequestHandlerInterface`, `ServerRequestFactoryInterface`, `StreamFactoryInterface` |
 | URL spec cache | PSR-16 `CacheInterface`, when a spec cache TTL is set (`openapi.cache_ttl` in Yii3) |
 
 `ServerRequestFactoryInterface` and `RequestFactoryInterface` are distinct

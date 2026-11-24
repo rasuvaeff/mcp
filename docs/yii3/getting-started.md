@@ -13,10 +13,10 @@ params and console commands. It installs `rasuvaeff/mcp` and
 
 | Requirement | Version |
 |---|---|
-| PHP | 8.3 – 8.5 |
+| PHP | 8.3 – 8.6 |
 | `mcp/sdk` | `~0.10.0` (experimental until 1.0 — hence the tilde pin) |
 | MCP protocol | 2024-11-05 … 2025-11-25 (negotiated) and 2026-07-28 stateless |
-| `ext-fileinfo` | required by the SDK |
+| `ext-fileinfo` | optional: MIME detection of file content |
 
 ## Install
 
@@ -97,8 +97,8 @@ An MCP client connects with the secret header:
 
 ## stdio for local development
 
-```php
-// add McpServeCommand to your console commands
+```bash
+# the command is registered automatically
 ./yii mcp:serve
 ```
 

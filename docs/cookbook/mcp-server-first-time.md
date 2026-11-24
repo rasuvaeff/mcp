@@ -42,7 +42,8 @@ final readonly class OrderTools
 ],
 ```
 
-See [Getting started](/intro/getting-started) for the routing step.
+See [Yii3: getting started](/yii3/getting-started#_3-route-the-endpoint) for the
+routing step.
 
 ## 2. Confirm it's actually served
 
@@ -82,8 +83,7 @@ Assert::same('paid', $result['content'][0]['text']);
 ```
 
 `McpTester` drives the real Streamable HTTP code path in-process — no HTTP
-server, no stdio process. See [Capabilities](/capabilities) for what else
-it can call (`listTools()`, `listResources()`, `readResource()`, raw
+server, no stdio process. See [Testing](/testing) for what else it can call (`listTools()`, `listResources()`, `readResource()`, raw
 `request()`).
 
 ## 5. Pin the contract with a schema snapshot

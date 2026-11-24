@@ -31,7 +31,7 @@ prepend tool-call budget and append caching/size-limit automatically (see
         TracingToolCallInterceptor::class,     // telemetry — outermost of the observability pair,
                                                 // so the span covers RBAC and audit too
         MetricsToolCallInterceptor::class,     // telemetry
-        AuditTrailInterceptor::class,          // audit log — records the RBAC decision's outcome too
+        AuditTrailInterceptor::class,          // audit log
         RbacToolCallInterceptor::class,        // RBAC — the actual permission check
     ],
     'tool_visibility' => RbacToolVisibility::class,
@@ -43,12 +43,13 @@ internal constraint (`SessionIdentityInterceptor` outermost within RBAC,
 `TracingToolCallInterceptor` outermost within telemetry so its span covers
 everything nested inside it). Placing tracing before audit means a rejected
 call still gets a span with `mcp.outcome=rejected`; placing audit before
-RBAC means the audit trail records the RBAC decision as its outcome.
+RBAC records the denial as the outcome, but only without `RbacToolVisibility`:
+a hidden tool is answered `-32602` before the chain, so no bridge sees it.
 
 ## A shared blind spot: rejections outside the chain
 
 All three bridges observe interceptors, and interceptors run **inside** the
-chain the core builds. Two kinds of rejection happen **before** that chain
+chain the core builds. Three kinds of rejection happen **before** that chain
 runs at all, and are therefore invisible to every bridge simultaneously:
 
 1. **Tool-call budget exhaustion.** `ToolCallBudgetInterceptor` is always the
@@ -59,8 +60,11 @@ runs at all, and are therefore invisible to every bridge simultaneously:
    foreign or ownerless session is rejected by `McpAction` /
    `InterceptingReferenceHandler` before the interceptor chain runs at all —
    see [Security: session ownership](/security#session-ownership).
+3. **A hidden tool.** With a visibility filter configured, a call to a tool
+   the caller may not see is answered `-32602` like a missing one — see
+   [Visibility](/visibility).
 
-Neither produces an audit event, a span, a metric, or an RBAC decision. An
+None of them produces an audit event, a span, a metric, or an RBAC decision. An
 exhausted budget looks like the agent going silent; a hijack attempt stopped
 by the core shows up only in application/web-server logs. This is
 documented in each bridge's own page, not a bug in any of them — a session
@@ -71,19 +75,16 @@ observe.
 
 Both the audit and telemetry bridges classify a call's result through the
 core's `Interceptor\CallOutcome` (`success` / `rejected` / `error`,
-`fromThrowable()`) — a `ToolCallException` (RBAC denial, rate limit, session
-budget) is `rejected`, never conflated with an unexpected crash (`error`).
+`fromThrowable()`) — a `ToolCallException` (RBAC denial, rate limit) is
+`rejected`, never conflated with an unexpected crash (`error`).
 This is what lets an audit query and a metrics alert agree on what "the
 call was refused" means, and it is also what the [RBAC bridge](/bridges/rbac)'s
 denials feed into when audit runs alongside it.
 
 ## A shared helper: `ArgumentMasker`
 
-Both the audit bridge (via `rasuvaeff/yii3-audit-log`'s own
-`SensitiveValueMasker`, field-name-only, not recursive) and the telemetry
-bridge (via the core's `Interceptor\ArgumentMasker`, recursive) mask
-sensitive tool arguments before they leave the process — see
+Both the audit and telemetry bridges mask arguments with the core's recursive
+`Interceptor\ArgumentMasker` before they leave the process — see
 [Interceptors: masking sensitive arguments](/interceptors#masking-sensitive-arguments).
-The two masking semantics are documented separately on each bridge's page;
-they are not identical, so check which one applies to your audit vs. trace
-storage.
+The audit trail then also passes through `rasuvaeff/yii3-audit-log`'s
+`SensitiveValueMasker`.

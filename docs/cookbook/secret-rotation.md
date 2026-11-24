@@ -49,9 +49,8 @@ the window — they all key off the client id, never the secret itself.
 Update whatever holds `MCP_SECRET_CLAUDE` in each client's configuration —
 Claude Code/Desktop config, CI variables, any other holder — to the new
 value. There is no server-side signal for "all clients rolled"; track it
-operationally (a deploy checklist, a dashboard of which secret value is
-producing traffic if your [telemetry bridge](/bridges/telemetry) is wired
-up with per-client attributes).
+with a deploy checklist; telemetry cannot tell, both secrets resolve to the
+same client id.
 
 ## 3. Remove the old secret
 

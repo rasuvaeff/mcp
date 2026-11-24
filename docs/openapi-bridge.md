@@ -82,8 +82,8 @@ top-level keywords canonicalized to `type`/`properties`/`required`/
 `additionalProperties`/`description`). Array/scalar responses and `2XX`
 wildcards are not advertised — a JSON object payload still arrives as
 `structuredContent`, just without the upfront contract. Keep the OpenAPI
-document honest: a spec that diverges from the API surfaces as client-side
-validation errors.
+document honest: a response that does not match the declared schema is answered
+as a tool error ("Invalid structured output…").
 
 ## Per-operation customization
 
@@ -123,11 +123,12 @@ by identity, below the client-id level.
 
 A dry-run-enabled operation's `inputSchema` gains a `dryRun: boolean`
 argument. Calling the tool with `dryRun: true` returns the request that
-*would* be sent (`operationId`, `method`, `url`, `body`) as text — never as
-`structuredContent`, so it never conflicts with the operation's declared
-`outputSchema` — without sending it, and without any upstream credentials
-leaving the process (headers are never included in the preview). The flag is
-checked twice, fail-closed: an operationId absent from `dry_run` ignores a
+*would* be sent (`operationId`, `method`, `url`, `body`) as text — without sending it, and without any upstream credentials
+leaving the process (headers are never included in the preview). On the handshake era the
+preview is never `structuredContent`; on the stateless 2026-07-28 era the SDK
+treats it as `structuredContent` when the operation advertises an
+`outputSchema`, and answers with a tool error. The flag is checked twice,
+fail-closed: an operationId absent from `dry_run` ignores a
 `dryRun` argument entirely and always executes for real, even if a client
 sends it anyway. On a dry-run-enabled operation a non-boolean `dryRun`
 value (`1`, `"true"`) is rejected with an error instead of being executed —
@@ -154,8 +155,8 @@ path entirely:
     // ...
     'executor' => 'psr15',
     // Psr\Http\Server\RequestHandlerInterface FQCN, resolved through the DI
-    // container — the application's own handler (typically the console
-    // application's). Required for psr15 mode.
+    // container — the application's own handler (typically the HTTP
+    // application's dispatcher). Required for psr15 mode.
     'handler' => App\RequestHandler::class,
     // optional: OpenApi\ExecutionRequestAttributesInterface FQCN — maps the
     // resolved ExecutionIdentity to request attributes on the nested
@@ -305,8 +306,7 @@ allow-list never exposed). The segment cap is what bounds that, so keep it as
 low as the upstream's real nesting depth. The base URL must not
 embed credentials (userinfo) or carry a query string/fragment — dry-run
 previews return the full URL to the caller, so the base URL is never allowed
-to be a credential carrier. Fixed upstream headers belong in `headers`/
-`HttpOperationExecutor::defaultHeaders`. **Bridged operations execute with the
+to be a credential carrier. Fixed upstream headers belong in `headers`. **Bridged operations execute with the
 configured upstream credentials. The upstream API does not automatically
 inherit the MCP caller identity or RBAC decision. Do not expose user/tenant-
 scoped operations with a broader service token.**
@@ -404,10 +404,13 @@ the base URL can never be a credential carrier.
 ## Spec parsing constraints
 
 Local `#/components/...` `$ref`s resolve inline; a recursive schema keeps
-its reference with a `$defs` entry; external (URL/file) `$ref`s are refused. URL parameters are limited to scalar `string`/`integer`/`number`/
-`boolean` schemas with OpenAPI's defaults (`simple` path, `form` query) —
-header/cookie parameters, external or non-scalar parameter schemas, custom
-serialization, non-default `explode`, and `allowReserved=true` throw
+its reference with a `$defs` entry; external (URL/file) `$ref`s are refused. URL parameters
+are scalar (`string`/`integer`/`number`/`boolean`) with OpenAPI's defaults
+(`simple` path, `form` query), or — in the query only — arrays of scalars (see
+[Array-valued query parameters](#array-valued-query-parameters)). Cookie
+parameters, header parameters (other than `Accept`, `Authorization` and
+`Content-Type`, which OpenAPI says to ignore), other non-scalar schemas, custom
+styles, non-default `explode` on a scalar and `allowReserved=true` throw
 `InvalidSpecException` when the operation is selected. Duplicate
 `operationId` values fail while indexing. An operation with a path and a
 query parameter sharing one name — or a parameter named `body` alongside a
@@ -426,10 +429,9 @@ regardless. A cache failure falls back to HTTP; an HTTP or spec failure
 remains fail-closed. A removed operation can remain callable for up to the
 TTL — use a local file or a short TTL for security-sensitive specs.
 
-For custom scenarios, use the pieces directly: `SpecIndex` +
-`HttpOperationExecutor` + `OpenApiServerConfigurator` — a
-`ServerConfiguratorInterface`, the generic extension point accepted by
-`McpServerFactory::create(tools, configurators)`.
+For custom scenarios use `OpenApiBridgeFactory::create()`: it returns an
+`OpenApiServerConfigurator`, a `ServerConfiguratorInterface` passed to
+`McpServerFactory::create(toolClasses: …, configurators: […])`.
 
 See [Cookbook: bridging an existing REST API](/cookbook/bridging-existing-api)
 for a worked example.

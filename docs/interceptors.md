@@ -27,7 +27,7 @@ final readonly class TracingInterceptor implements ToolCallInterceptorInterface
     public function intercept(ToolCallContext $context, callable $next): mixed
     {
         // $context->toolName, $context->arguments, $context->session,
-        // $context->clientId, $context->getClientInfo()
+        // $context->clientId, $context->clientInfo()
         $this->logger->info('tools/call', ['tool' => $context->toolName]);
 
         return $next();   // skip $next() to short-circuit
@@ -121,7 +121,7 @@ call (fail-closed).
 This is loop protection, not a client quota. Client quotas belong to an
 application-level rate limiter. The budget guard is always the outermost
 interceptor, so it rejects before any other interceptor does work. 3.x's
-`tool_call_budget.calls` fails the build with a pointer to the new key.
+`session.budget` fails the build with a pointer to the new key.
 
 ## Masking sensitive arguments
 
@@ -141,7 +141,8 @@ $safe = $masker->mask($context->arguments);
 The default key list: `password`/`pass`/`pwd`, `secret`, `token`/`bearer`/
 `jwt`, `auth`/`authorization`, `cookie`, `api_key`/`apikey`/`api-key`/
 `x-api-key`, `access_token`/`refresh_token`/`id_token`/`session_token`/
-`auth_token` (and their kebab spellings), `client_secret`, `private_key`,
+`auth_token` (and their joined spellings, e.g. `refreshtoken`; of the kebab
+forms only `access-token`), `client_secret`, `private_key`,
 `credit_card`. Comparison is exact after lowercasing — `apikey` matches
 `ApiKey` but not `apiKeyHeader`; pass your own list to cover
 application-specific names. It is one shared helper so every consumer
@@ -205,7 +206,7 @@ What `pretty` changes — and what deliberately does not:
   keep seeing the **raw** handler result: the conversion happens after the
   interceptor chain, right before the SDK would have formatted the result.
   The size limit's byte budget therefore measures the same thing it did
-  before — the encoded result simply ends up smaller.
+  before — what reaches the agent is larger than what was measured.
 
 For read-heavy tools called repeatedly with the same arguments inside a
 session (a lookup table, an OpenAPI GET), `cache.tools` skips the handler
@@ -375,7 +376,9 @@ final readonly class RetryInterceptor implements ToolCallInterceptorInterface
         return Retry::new()
             ->maxAttempts(3)
             ->withExponential(baseMs: 100, multiplier: 2.0, capMs: 2_000)
-            ->retryOn(OperationFailedException::class)   // transient failures only
+            // the bridge rethrows it as ToolCallException; it covers every upstream
+            // failure, 4xx included — narrow it further
+            ->retryIf(static fn(\Throwable $e): bool => $e->getPrevious() instanceof OperationFailedException)
             ->run($next);
     }
 }

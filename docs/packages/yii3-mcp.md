@@ -17,7 +17,7 @@ composer require rasuvaeff/yii3-mcp
 |---|---|
 | Namespace | `Rasuvaeff\Yii3Mcp` (runtime classes: `Rasuvaeff\Mcp`) |
 | Repository | [github.com/rasuvaeff/yii3-mcp](https://github.com/rasuvaeff/yii3-mcp) |
-| Requirements | PHP 8.3 – 8.6, `mcp/sdk ~0.10.0`, `ext-fileinfo` |
+| Requirements | PHP 8.3 – 8.6, `mcp/sdk ~0.10.0` |
 
 ## Where to start
 

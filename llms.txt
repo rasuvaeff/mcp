@@ -48,8 +48,9 @@ final readonly class OrderTools
 
     // Structured output: declare outputSchema + return an array — the SDK
     // serves the schema in tools/list and mirrors the return value into the
-    // result's structuredContent (alongside the text content). An array/object
-    // return produces structuredContent even without outputSchema.
+    // result's structuredContent (alongside the text content). An
+    // associative array/object return produces structuredContent even without
+    // outputSchema (a list only on the stateless 2026-07-28 revision).
     #[McpTool(name: 'order.details', outputSchema: [
         'type' => 'object',
         'properties' => ['status' => ['type' => 'string'], 'total' => ['type' => 'integer']],
@@ -175,7 +176,7 @@ $factory = new McpServerFactory(
     version: '1.0.0',
     logger: null,                      // ?LoggerInterface
 );
-$server = $factory->create([OrderTools::class]);  // Mcp\Server
+$server = $factory->create([OrderTools::class]);  // Mcp\Server\Server
 // throws Rasuvaeff\Mcp\Exception\InvalidToolClassException on unknown
 // class or class without capability attributes
 ```
@@ -185,7 +186,7 @@ $server = $factory->create([OrderTools::class]);  // Mcp\Server
 ```php
 use Rasuvaeff\Mcp\McpAction;
 
-new McpAction(server: $server, responseFactory: $psr17, streamFactory: $psr17);
+new McpAction(server: $server, responseFactory: $psr17, streamFactory: $psr17, sessionStore: $sessionStore);
 // handle(ServerRequestInterface): ResponseInterface — Streamable HTTP transport
 // route POST/GET/DELETE/OPTIONS /mcp to it
 ```
@@ -315,7 +316,7 @@ public function cancel(string $orderId, RequestContext $context): string
 - With a handshake-era $context: checks the session subscription first (never
   unsolicited) and notifies the CALLING session only.
 - Handshake sessions: reaches ONLY the calling session. `SubscriptionManagerInterface` is bound in
-  `config/di.php` (default `SessionSubscriptionManager`) and shared with the SDK's
+  yii3-mcp's `config/di.php` (default `SessionSubscriptionManager`) and shared with the SDK's
   subscribe/unsubscribe handlers — swap the binding and both sides follow.
 - Sends by suspending the handler Fiber; outside a Fiber `ClientGateway::notify()`
   throws, so test it inside `new Fiber(...)`, not through `Testing\McpTester`
@@ -496,8 +497,7 @@ use Rasuvaeff\Mcp\Interceptor\ToolCallLimiterInterface;
 use Rasuvaeff\Mcp\Interceptor\ArgumentMasker;
 $masker = new ArgumentMasker();               // or new ArgumentMasker(['ssn', ...])
 $safe = $masker->mask($context->arguments);   // sensitive keys => '***'
-// defaults: password, secret, token, api_key, apikey, api-key, x-api-key,
-// credit_card;
+// defaults: 30 names for passwords, tokens, API keys, auth headers, cookies and cards;
 // case-insensitive exact key match, applied at EVERY nesting level — arrays
 // and the \stdClass objects SDK 0.10 passes for nested JSON objects;
 // a sensitive key's whole value (array included) becomes '***'.
@@ -538,7 +538,7 @@ final readonly class MyVisibility implements ToolVisibilityInterface
 // Multi-tenant (rasuvaeff/yii3-tenancy): route middleware order
 // SharedSecretMiddleware -> TenantResolutionMiddleware -> McpAction;
 // per-tenant session isolation = bind SessionStoreInterface to a
-// FileSessionStore with a per-tenant directory. Secret stays global
+// Session\PrivateFileSessionStore with a per-tenant directory. Secret stays global
 // (trusted-only endpoint model); per-tenant secrets are a planned extension.
 ```
 
@@ -574,7 +574,7 @@ CallOutcome::fromThrowable($e);   // ToolCallException/PromptGetException/Resour
 
 - `completion/complete` (argument autocompletion via `#[CompletionProvider]`
   on a prompt argument or resource-template variable) is served by the SDK
-  DIRECTLY off the registry, bypassing the reference handler. yii3-mcp
+  DIRECTLY off the registry, bypassing the reference handler. The runtime
   decorates it so the configured `prompt_visibility` / `resource_visibility`
   applies: a hidden prompt/template answers "not found", byte-identical to a
   missing one. Interceptors still do NOT wrap completion — it is a metadata

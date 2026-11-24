@@ -15,7 +15,7 @@ wiring below from params.
 | PHP | 8.3 – 8.6 |
 | `mcp/sdk` | `~0.10.0` (experimental until 1.0 — hence the tilde pin) |
 | MCP protocol | 2024-11-05 … 2025-11-25 (negotiated) and 2026-07-28 stateless |
-| `ext-fileinfo` | required by the SDK |
+| `ext-fileinfo` | optional: MIME detection of file content |
 | PSR-7/PSR-17 implementation | any, for the HTTP endpoint |
 
 ## Install
@@ -83,7 +83,11 @@ Everything documented on this site is a constructor argument:
 $server = $factory->create(
     toolClasses: [OrderTools::class],
     configurators: [$openApiServerConfigurator],
-    interceptors: [new ToolCallBudgetInterceptor(50), $tracingInterceptor],
+    interceptors: [
+        // the stateless era counts in the cache and refuses calls without one
+        new ToolCallBudgetInterceptor(budget: 50, cache: $psr16Cache, namespace: 'my-app'),
+        $tracingInterceptor,
+    ],
     toolVisibility: $planBasedVisibility,
 );
 ```

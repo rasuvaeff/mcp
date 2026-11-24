@@ -37,15 +37,16 @@ cross tenants:
 ```php
 // config/common/di/mcp.php
 SessionStoreInterface::class => static fn (CurrentTenant $tenant) =>
-    new FileSessionStore(
-        directory: sys_get_temp_dir() . '/mcp-sessions/' . $tenant->get()->getId(),
+    new PrivateFileSessionStore( // Rasuvaeff\Mcp\Session, owner-only
+        directory: sys_get_temp_dir() . '/mcp-sessions/' . $tenant->get()->id,
     ),
 ```
 
 ## Per-tenant tool sets
 
 Come free with [`tool_visibility`](/visibility#per-session-visibility):
-decide from the resolved tenant instead of `client_info`.
+decide from the resolved tenant instead of `client_info` (which the session
+holds on the handshake era only).
 
 ## Honest scope
 
