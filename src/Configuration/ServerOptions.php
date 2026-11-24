@@ -6,6 +6,8 @@ namespace Rasuvaeff\Mcp\Configuration;
 
 use InvalidArgumentException;
 use Mcp\Schema\Enum\ProtocolVersion;
+use Mcp\Server\Fiber\FiberContextInterface;
+use Mcp\Server\Resource\SubscriptionManagerInterface;
 use Mcp\Server\Session\SessionStoreInterface;
 use Mcp\Server\Subscription\InMemoryNotificationBus;
 use Mcp\Server\Subscription\NotificationBusInterface;
@@ -15,6 +17,7 @@ use Mcp\Server\Wire\CachePolicy;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
+use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
 use Rasuvaeff\Mcp\CachePolicyParams;
 use Rasuvaeff\Mcp\Identity\StaticSecretResolver;
@@ -166,6 +169,40 @@ final readonly class ServerOptions
             'bindRequestState' => $requestState['bind'] ?? true,
             'subscriptionLifetime' => (float) ($notifications['subscription_lifetime'] ?? McpServerFactory::DEFAULT_SUBSCRIPTION_LIFETIME),
         ];
+    }
+
+    public function serverFactory(
+        ContainerInterface $container,
+        SessionStoreInterface $sessionStore,
+        ?LoggerInterface $logger = null,
+        ?SubscriptionManagerInterface $subscriptionManager = null,
+        ?NotificationBusInterface $notificationBus = null,
+        ?FiberContextInterface $fiberContext = null,
+    ): McpServerFactory {
+        $arguments = $this->factoryArguments();
+
+        return new McpServerFactory(
+            container: $container,
+            sessionStore: $sessionStore,
+            name: $arguments['name'],
+            version: $arguments['version'],
+            logger: $logger,
+            instructions: $arguments['instructions'],
+            paginationLimit: $arguments['paginationLimit'],
+            protocolVersion: $arguments['protocolVersion'],
+            subscriptionManager: $subscriptionManager,
+            compactToolResults: $arguments['compactToolResults'],
+            modernEra: $arguments['modernEra'],
+            headerValidation: $arguments['headerValidation'],
+            notificationBus: $notificationBus,
+            subscriptionLifetime: $arguments['subscriptionLifetime'],
+            requestStateKey: $arguments['requestStateKey'],
+            requestStateTtl: $arguments['requestStateTtl'],
+            cachePolicy: $arguments['cachePolicy'],
+            previousRequestStateKeys: $arguments['previousRequestStateKeys'],
+            bindRequestState: $arguments['bindRequestState'],
+            fiberContext: $fiberContext,
+        );
     }
 
     /**

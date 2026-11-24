@@ -6,11 +6,14 @@ namespace Rasuvaeff\Mcp\Tests\Configuration;
 
 use InvalidArgumentException;
 use Mcp\Schema\Enum\ProtocolVersion;
+use Mcp\Server\Resource\SessionSubscriptionManager;
+use Mcp\Server\Session\InMemorySessionStore;
 use Mcp\Server\Subscription\InMemoryNotificationBus;
 use Mcp\Server\Subscription\Psr16NotificationBus;
 use Mcp\Server\Subscription\Psr6NotificationBus;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Log\NullLogger;
 use Psr\SimpleCache\CacheInterface;
 use Rasuvaeff\Mcp\CachePolicyParams;
 use Rasuvaeff\Mcp\Configuration\ServerOptions;
@@ -91,6 +94,33 @@ final class ServerOptionsTest
             'subscriptionLifetime' => 3.0,
         ]);
         Assert::same($options->allowedHosts(), ['mcp.test']);
+    }
+
+    public function theFactoryIsBuiltFromEveryArgument(): void
+    {
+        $container = new SimpleContainer([]);
+        $store = new InMemorySessionStore();
+        $logger = new NullLogger();
+        $subscriptions = new SessionSubscriptionManager();
+        $bus = new InMemoryNotificationBus();
+        $options = ServerOptions::fromParams([
+            'server_name' => 'app',
+            'server_version' => '1.2',
+            'instructions' => 'read me',
+            'pagination_limit' => 7,
+            'protocol_version' => ProtocolVersion::latestHandshake()->value,
+            'result_json' => 'pretty',
+            'modern_era' => false,
+            'header_validation' => false,
+            'cache_policy' => ['ttl_ms' => 1000],
+            'request_state' => ['key' => str_repeat('k', 32), 'ttl' => 5, 'previous_keys' => ['p'], 'bind' => false],
+            'notifications' => ['subscription_lifetime' => 3],
+        ]);
+
+        Assert::equals(
+            $options->serverFactory($container, $store, $logger, $subscriptions, $bus),
+            new McpServerFactory(...$options->factoryArguments(), container: $container, sessionStore: $store, logger: $logger, subscriptionManager: $subscriptions, notificationBus: $bus),
+        );
     }
 
     public function numericConfigurationStringsAreAccepted(): void
