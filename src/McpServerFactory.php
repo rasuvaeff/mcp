@@ -290,7 +290,7 @@ final readonly class McpServerFactory
         // every server gets its own registry wrapped in the duplicate guard:
         // the SDK registry is last-write-wins, so a name collision between ANY
         // two registration paths (attribute tools, configurators, the OpenAPI
-        // bridge, Markdown prompts) would silently drop one handler while
+        // bridge) would silently drop one handler while
         // name-keyed rules (visibility, cache, RBAC, audit) keep matching —
         // the guard turns that into a build-time DuplicateCapabilityException
         $registry = new GuardedRegistry(new Registry(logger: $this->logger ?? new NullLogger()));

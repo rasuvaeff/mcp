@@ -16,6 +16,8 @@ filters, session ownership and OAuth, served over PSR-15 or stdio. Using Yii3?
 Install [`rasuvaeff/yii3-mcp`](https://github.com/rasuvaeff/yii3-mcp), which wires
 this package for you.
 
+**[Documentation](https://rasuvaeff.github.io/mcp/)** — guide, Yii3 integration, bridges, cookbook and API reference.
+
 > **Using an AI coding assistant?** [llms.txt](llms.txt) contains a compact API
 > reference you can share with the model. Contributors: see [AGENTS.md](AGENTS.md).
 > Projects using the [llm/skills](https://github.com/roxblnfk/skills) Composer

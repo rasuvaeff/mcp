@@ -25,7 +25,7 @@ use Rasuvaeff\Mcp\Exception\DuplicateCapabilityException;
  * the wrong handler. {@see McpServerFactory} installs this guard on every
  * server it builds, covering ALL registration paths at the single point they
  * converge: attribute tools, configurators, OpenAPI-bridged operations and
- * Markdown prompts alike. Re-registering after an explicit unregister stays
+ * configurator-registered prompts alike. Re-registering after an explicit unregister stays
  * allowed — only a duplicate among live registrations throws.
  *
  * @internal

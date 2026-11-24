@@ -13,18 +13,18 @@ use Yiisoft\Test\Support\Container\SimpleContainer;
 
 final class McpServerFactoryBench
 {
-    #[Bench(
-        callables: [
-            'without tools' => [self::class, 'createEmptyServer'],
-        ],
-        calls: 500,
-        iterations: 5,
-    )]
     public static function createServerWithTool(): Server
     {
         return self::factory()->create([GreetingTool::class]);
     }
 
+    #[Bench(
+        callables: [
+            'with a tool' => [self::class, 'createServerWithTool'],
+        ],
+        calls: 500,
+        iterations: 5,
+    )]
     public static function createEmptyServer(): Server
     {
         return self::factory()->create([]);
