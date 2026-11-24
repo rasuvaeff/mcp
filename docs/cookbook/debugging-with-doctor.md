@@ -25,13 +25,11 @@ param to set (`endpoint_secret` / `client_secrets`).
 
 ## "mcp:list works but the client can't connect"
 
-`mcp:list` exercises the **console** DI group; the HTTP endpoint runs in
-the **web** group. A service bound in one but not the other is invisible to
-`mcp:list` and only breaks at request time. Run `mcp:doctor` against the
-same environment the client actually hits — it reports every missing PSR
-service by its exact interface name (`ResponseFactoryInterface`,
-`ServerRequestFactoryInterface`, …), so a `di.php` split between config
-groups is easy to spot. See
+`mcp:list` and `mcp:doctor` are console commands: doctor checks the services
+`McpAction` needs (and names a missing one by its exact interface), but in the
+**console** container. A service bound only for console passes both commands
+and fails over HTTP — keep the PSR-17/PSR-18 bindings in a common config
+group. See
 [Architecture: PSR services](/intro/architecture#what-the-runtime-needs)
 for which entry point needs what.
 
@@ -68,8 +66,9 @@ echo "exit: $?"
 
 Exit codes are stable for scripting: `0` healthy, `2` config error, `3`
 storage error, `4` upstream error — the category of the **first** failing
-check (checks run root-causes-first). Gate a deploy on this exit code
-directly rather than grepping the human-readable table, and remember the
+check (checks run root-causes-first). With OAuth or a
+network ACL instead of a secret, the `endpoint_secret` check still fails (exit
+`2`). Otherwise gate a deploy on this exit code directly rather than grepping the human-readable table, and remember the
 JSON output — like the table — never contains the configured secret or
 header values.
 
@@ -77,8 +76,8 @@ header values.
 
 Two things it deliberately does **not** simulate:
 
-- **Client identity.** `mcp:doctor` and `mcp:list` both drive a synthetic,
-  unauthenticated session — a real client's [visibility](/visibility) or
+- **Client identity.** `mcp:list` drives a synthetic, unauthenticated session and
+  `mcp:doctor` makes no MCP call at all — a real client's [visibility](/visibility) or
   [RBAC](/bridges/rbac) outcome can differ. See
   [Operations: mcp:list](/operations#introspection-mcp-list).
 - **Session ownership across requests.** A single doctor run doesn't

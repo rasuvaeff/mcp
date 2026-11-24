@@ -126,7 +126,7 @@ for you (core-doesn't-bind-the-swappable-interface principle).
 
 | Class | Role |
 |---|---|
-| `RbacToolCallInterceptor` | rejects `tools/call` without the mapped permission (regular MCP tool error, fail-closed for guests) |
+| `RbacToolCallInterceptor` | rejects `tools/call` without the mapped permission (regular MCP tool error, fail-closed for guests); with `RbacToolVisibility` the call is already answered "not found" before this interceptor |
 | `RbacToolVisibility` | hides the same tools from `tools/list` — list and call can never disagree (one `PermissionMap`) |
 | `SessionIdentityInterceptor` | binds the MCP session to its first identity; a leaked `Mcp-Session-Id` presented with another user's token is rejected |
 | `PermissionMap` | tool name → permission: `#[RequiredPermission]` scan + explicit overrides |
@@ -164,7 +164,7 @@ console identity binding before treating zero visible tools as a bug (see
 
 | Requirement | Version |
 |---|---|
-| PHP | 8.3 – 8.5 |
+| PHP | 8.3 – 8.6 |
 | `rasuvaeff/mcp` | `^0.1` |
 | `rasuvaeff/yii3-mcp` | `^6.0` in a Yii3 application |
 | `yiisoft/access` | `^2.0` |

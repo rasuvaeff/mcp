@@ -62,8 +62,9 @@ public function status(string $orderId): array
 }
 ```
 
-An array (or JSON-serializable object) return produces `structuredContent`
-even without an `outputSchema` — declaring the schema is what lets the agent
+An associative array (or an object encoding to a JSON object) produces
+`structuredContent` even without an `outputSchema` (a list does so only on the
+stateless 2026-07-28 revision) — declaring the schema is what lets the agent
 know the shape up front. `Testing\SchemaSnapshot` covers output schemas the
 same way it covers input schemas, so accidental drift fails the build (see
 [Cookbook: your first MCP server](/cookbook/mcp-server-first-time)).

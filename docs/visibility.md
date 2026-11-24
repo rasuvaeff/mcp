@@ -47,7 +47,7 @@ keep `tag:` for allow-listing and for local spec files.
 Deny wins over allow; both lists empty (the default) means every tool is
 visible. When the decision depends on the **session** (admin vs public
 client, tenant plans), implement `Visibility\ToolVisibilityInterface`
-instead — the decision runs per session, against the handshake data:
+instead — the decision runs per session, against the handshake data (the stateless era has none):
 
 ```php
 use Mcp\Schema\Tool;
@@ -58,7 +58,7 @@ final readonly class PlanBasedVisibility implements ToolVisibilityInterface
 {
     public function isVisible(Tool $tool, ?SessionInterface $session): bool
     {
-        // decide from $session->get('client_info'), tenant data, …
+        // decide from $session->get('client_info') (handshake era only), tenant data, …
         return !str_starts_with($tool->name, 'admin.') || $this->isAdmin($session);
     }
 }
@@ -84,7 +84,7 @@ filter, not a replacement for application-level ACL.
 
 When the decision depends on the **session** (admin vs. public client,
 tenant plan), implement `Visibility\ToolVisibilityInterface` instead — it
-runs per session, against the handshake data:
+runs per session, against the handshake data (the stateless era has none):
 
 ```php
 use Mcp\Schema\Tool;
@@ -95,7 +95,7 @@ final readonly class PlanBasedVisibility implements ToolVisibilityInterface
 {
     public function isVisible(Tool $tool, ?SessionInterface $session): bool
     {
-        // decide from $session->get('client_info'), tenant data, …
+        // decide from $session->get('client_info') (handshake era only), tenant data, …
         return !str_starts_with($tool->name, 'admin.') || $this->isAdmin($session);
     }
 }
@@ -112,7 +112,8 @@ exclusive — configuring both is a build-time error (`LogicException`).
 
 Either kind applies in **two places, consistently**: `tools/list` omits
 invisible tools, and `tools/call` **fail-closed** rejects them — a client
-that guesses a hidden name still gets a tool error, and the call never
+that guesses a hidden name gets the same `-32602 Tool not found` error as a
+missing tool, and the call never
 reaches the interceptor chain or the tool itself. This is an early filter,
 not a replacement for application-level ACL — see the
 [RBAC bridge](/bridges/rbac) for authorization that also runs *inside* the

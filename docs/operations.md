@@ -32,7 +32,7 @@ per-session visibility or RBAC wired in, a real client may see a different
 capability set.
 
 The command (like `McpTester`) needs PSR-17 factories in the container. Keep
-these services in every config group that builds `Mcp\Server`, including the
+these services in every config group that builds `Mcp\Server\Server`, including the
 console group:
 
 | Entry point / feature | Required services |

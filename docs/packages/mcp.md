@@ -15,7 +15,7 @@ composer require rasuvaeff/mcp
 |---|---|
 | Namespace | `Rasuvaeff\Mcp` |
 | Repository | [github.com/rasuvaeff/mcp](https://github.com/rasuvaeff/mcp) |
-| Requirements | PHP 8.3 – 8.6, `mcp/sdk ~0.10.0`, `ext-fileinfo` |
+| Requirements | PHP 8.3 – 8.6, `mcp/sdk ~0.10.0` |
 
 ## Key classes
 

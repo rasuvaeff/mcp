@@ -11,9 +11,9 @@ value as a constructor argument; see [Getting started](/intro/getting-started#_4
 :::
 
 **The endpoint is trusted-only.** MCP tools execute application code; treat
-the endpoint like an admin API. Ship it behind `SharedSecretMiddleware` or an
-explicit network ACL — OAuth from the MCP authorization spec is deliberately
-out of scope until it stabilizes.
+the endpoint like an admin API. Ship it behind `SharedSecretMiddleware`,
+`OAuth\BearerTokenMiddleware` ([OAuth 2.1 resource server](/oauth)) or an
+explicit network ACL.
 
 ## Shared secret
 
@@ -58,7 +58,8 @@ so the resolved client id is always `null`.
 
 The resolved client id is what interceptors see as `ToolCallContext::$clientId`
 (see [Interceptors](/interceptors)), what a [visibility](/visibility)
-implementation can branch on via the session, and what gets stamped into the
+implementation can branch on via the session on the handshake era (on the
+stateless era the session carries no client id when visibility runs), and what gets stamped into the
 session as its immutable owner — see below. See
 [Cookbook: rotating the shared secret](/cookbook/secret-rotation) for the
 rotation procedure end to end.
@@ -81,12 +82,11 @@ logs via the HTTP header. When a client identity is configured
    from an expired session — a foreign session cannot even be probed for
    existence.
 3. **Enforced a second time inside the reference handler.**
-   `InterceptingReferenceHandler::clientId()` reads identity from the
-   session first and throws `Exception\SessionOwnershipException` on an
-   owner/holder mismatch. This runs **before** visibility, so a foreign
-   session is never consulted for what the caller may see, and it keeps
-   identity correct under Fiber-interleaved runtimes where a process-local
-   holder alone cannot be trusted.
+   `InterceptingReferenceHandler::clientId()` throws
+   `Exception\SessionOwnershipException` on a mismatch between the session
+   owner and the client id the request itself carries. Both travel with the
+   session and the request, never in process state, so interleaved Fibers
+   keep their own identity.
 
 A session created before ownership stamping existed, or one with no
 recorded owner for any other reason, counts as **not owned** — fail-closed,
@@ -97,8 +97,9 @@ never silently adoptable. Deployments without client identity
 
 The MCP Streamable HTTP session spans several HTTP requests (`initialize`
 first, then `tools/call` with the returned `Mcp-Session-Id`). The SDK's
-default in-memory store would lose the session between FPM workers, so this
-package **defaults to a file-based store** — the shipped
+default in-memory store would lose the session between FPM workers, so
+`rasuvaeff/yii3-mcp` binds a file-based store by default (elsewhere pass it to
+`McpServerFactory` and `McpAction` yourself). The shipped
 `Session\PrivateFileSessionStore` keeps it owner-only: the directory is
 created `0700` (an application-specific default under `sys_get_temp_dir()`,
 derived from `server_name`; override via `session.dir`) and every session
@@ -169,8 +170,8 @@ the bytes are materialized, not truncated after the fact:
   `ServerConfiguratorInterface`.
 - **Tool errors never leak internals.** The SDK returns them as MCP error
   envelopes, not 500 traces.
-- **No OAuth.** The MCP authorization spec is out of scope until it
-  stabilizes; use the shared secret or a network ACL.
+- **It is not an OAuth authorization server.** The endpoint can act as an
+  OAuth 2.1 resource server ([OAuth](/oauth)); tokens are issued elsewhere.
 - **Bridged OpenAPI operations execute with the configured upstream
   credentials, not the MCP caller's identity**, unless delegated
   authorization (`openapi.identity_provider` +

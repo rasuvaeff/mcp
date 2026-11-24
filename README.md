@@ -30,7 +30,7 @@ this package for you.
 |---|---|
 | PHP | 8.3 – 8.6 |
 | `mcp/sdk` | `~0.10.0` (experimental until 1.0, hence the tilde pin) |
-| `ext-fileinfo` | required by the SDK |
+| `ext-fileinfo` | optional: MIME detection of file content |
 | PSR-7/PSR-17 implementation | any, for the HTTP endpoint |
 | `firebase/php-jwt` | optional, `^7.0`: JWT validation for OAuth |
 

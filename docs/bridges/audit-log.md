@@ -34,15 +34,15 @@ tools, OpenAPI-bridged operations, configurator-registered handlers):
 
 | Audit field | Value |
 |---|---|
-| actor | decided by an `AuditActorResolverInterface`; default type `mcp-client`, id = MCP session id, name = handshake client (`claude-code 1.2`) |
+| actor | decided by an `AuditActorResolverInterface`; default type `mcp-client`, id = MCP session id, or the client id where there is no session (stateless era, stdio); name = client (`claude-code 1.2`) |
 | action | `mcp.tools.call` |
 | subject | type `mcp-tool` (configurable), id = tool name |
 | changes | one field per tool argument, plus `mcp.outcome`, `mcp.duration_ms`, `mcp.session`, `mcp.client`, `mcp.client_id` (when the transport carries one), `mcp.error` (on failure) |
-| metadata | requestId = session id, userAgent = client name |
+| metadata | requestId = session id (handshake era only), userAgent = client name |
 
 `mcp.outcome` follows the core's shared
 [`CallOutcome`](/bridges/overview#a-shared-vocabulary-calloutcome) vocabulary
-— a rejection (rate limit, RBAC, tool-call budget) is distinguishable from an
+— a rejection (rate limit, RBAC) is distinguishable from an
 unexpected crash in audit queries. **Failures are recorded and rethrown** —
 the MCP error envelope the agent sees is unchanged, and a failing call is
 still audited.
@@ -70,7 +70,7 @@ return [AuditActorResolverInterface::class => IdentityAuditActorResolver::class]
 
 | Resolver | Actor |
 |---|---|
-| `ClientAuditActorResolver` (default) | type `mcp-client`, id = session id, name = handshake client |
+| `ClientAuditActorResolver` (default) | type `mcp-client`, id = session id or client id, name = client |
 | `IdentityAuditActorResolver` | type `mcp-user`, id = the authenticated user id (guest falls back to the connection) |
 | your own | anything the application knows |
 
@@ -83,23 +83,19 @@ is the one line above. A resolver that throws fails the call loudly — an
 event is never written under a wrong actor.
 
 The connection is never lost when the actor becomes a user: `mcp.session`,
-`mcp.client`, and `mcp.client_id` are recorded as change fields on **every**
-call regardless of actor. That attribution is stronger still
+`mcp.client`, and `mcp.client_id` (each when the transport carries it) are
+recorded as change fields regardless of actor. That attribution is stronger still
 — the session owner is immutable once stamped at `initialize`, so
 `mcp.client_id` on a session's events can never be silently reassigned
 mid-session.
 
 ## Masking sensitive arguments
 
-Each tool argument becomes its own change field, so `AuditLogger`'s
-`SensitiveValueMasker` applies exactly as to any other audited value: an
-argument named `password`, `secret`, `token`, `api_key`, or `credit_card`
-(or a custom key list) is stored as `***`. **This masker is field-name-only
-and not recursive** — a secret nested inside an array argument value is
-stored as-is; keep secrets in top-level arguments, or extend the masker's
-key list. (This differs from the [telemetry bridge](/bridges/telemetry)'s
-masking, which uses the core's `ArgumentMasker` and is recursive — see
-[Bridges: a shared helper](/bridges/overview#a-shared-helper-argumentmasker).)
+Argument values first go through the core's recursive `ArgumentMasker` (pass
+your own as `argumentMasker:`), so a secret nested in an array or object is
+masked at any depth. Each tool argument then becomes its own change field, and
+`AuditLogger`'s `SensitiveValueMasker` applies by field name — see
+[Bridges: a shared helper](/bridges/overview#a-shared-helper-argumentmasker).
 Call metadata fields keep the `mcp.` prefix so they can never collide with
 an argument name.
 
@@ -110,6 +106,7 @@ $interceptor = new AuditTrailInterceptor(
     auditLogger: $auditLogger,                            // Rasuvaeff\Yii3AuditLog\AuditLogger
     actorResolver: new ClientAuditActorResolver('agent'), // default: ClientAuditActorResolver('mcp-client')
     subjectType: 'mcp-tool',                              // default
+    argumentMasker: new ArgumentMasker(),                 // default
 );
 
 $server = $factory->create($tools, $configurators, [$interceptor]);
@@ -119,7 +116,7 @@ $server = $factory->create($tools, $configurators, [$interceptor]);
 
 | Requirement | Version |
 |---|---|
-| PHP | 8.3 – 8.5 |
+| PHP | 8.3 – 8.6 |
 | `rasuvaeff/mcp` | `^0.1` |
 | `rasuvaeff/yii3-mcp` | `^6.0` in a Yii3 application |
 | `rasuvaeff/yii3-audit-log` | `^1.0` |
