@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 — 2026-11-24
 
 - **Fixed:** visibility sees the client id of the request on the stateless era: it
   is resolved into the session before any filtered handler decides. It was null
