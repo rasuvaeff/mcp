@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 — 2026-11-25
 
 - **Fixed:** the stateless tool-call budget rejects a call when the cache reports a failed
   write, and counts on a store that returns numbers as strings (Laravel on Redis); both
