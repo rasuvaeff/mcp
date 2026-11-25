@@ -627,3 +627,33 @@ CallOutcome::fromThrowable($e);   // ToolCallException/PromptGetException/Resour
   `Psr\SimpleCache\CacheInterface` to the required services, a psr6 bus adds
   `Psr\Cache\CacheItemPoolInterface`.
 
+### Framework packages: shared configuration and adapter contract
+
+For authors of a framework integration; an application does not need these.
+
+```php
+use Rasuvaeff\Mcp\Configuration\{ServerComponentResolver, ServerOptions};
+
+$options = ServerOptions::fromParams($params); // throws on an unsupported value, naming the param
+$options->sessionStore();
+$options->notificationBus($container);         // null when none is configured
+$options->allowedHosts();
+$options->sharedSecretMiddleware($psr17);
+$factory = $options->serverFactory($container, $sessionStore, $logger, $subscriptionManager, $bus);
+$components = (new ServerComponentResolver($container, $params))->resolve($leadingConfigurators);
+```
+
+`$container->has()` must answer true for every class the container can build: the SDK
+instantiates a tool without dependencies otherwise.
+
+```php
+use Rasuvaeff\Mcp\Testing\AdapterContract;
+
+// the application serves Testing\AdapterContractTool (it needs Testing\AdapterContractDependency
+// autowired) behind SharedSecretMiddleware with these client_secrets
+$contract = new AdapterContract($handle, $psr17, $psr17, 'http://localhost/mcp', ['a' => 'secret-a', 'b' => 'secret-b']);
+foreach ($contract->checks() as $check) {
+    $check(); // throws Testing\AdapterContractViolation
+}
+```
+

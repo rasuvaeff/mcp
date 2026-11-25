@@ -150,6 +150,8 @@ SchemaSnapshot::verify($tester, __DIR__ . '/mcp-schema.json');
 | `Resource\ResourceUpdateNotifier` | sends `notifications/resources/updated` |
 | `Apps\McpAppsConfigurator`, `Apps\AppDefinition` | MCP Apps (`ui://` resources) |
 | `Testing\McpTester`, `Testing\McpErrorException`, `Testing\SchemaSnapshot` | in-process client and contract snapshot |
+| `Configuration\ServerOptions`, `Configuration\ServerComponentResolver` | for framework packages: server params → factory arguments and components |
+| `Testing\AdapterContract`, `Testing\AdapterContractViolation`, `Testing\AdapterContractTool`, `Testing\AdapterContractDependency` | for framework packages: the behaviour every adapter must keep |
 | `Exception\DuplicateCapabilityException` | two capabilities share one identity; the build fails |
 | `Exception\InvalidToolClassException` | a tool class is missing or has no capability attributes |
 | `Exception\SessionOwnershipException` | a call came from a client that does not own the session |

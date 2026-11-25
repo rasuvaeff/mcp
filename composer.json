@@ -54,6 +54,9 @@
         "vimeo/psalm": "^7.0",
         "yiisoft/test-support": "^3.0"
     },
+    "conflict": {
+        "opis/json-schema": "<2.6.2"
+    },
     "suggest": {
         "firebase/php-jwt": "JWT access-token validation for the OAuth resource server (BearerTokenMiddleware)"
     },

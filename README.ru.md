@@ -151,6 +151,8 @@ SchemaSnapshot::verify($tester, __DIR__ . '/mcp-schema.json');
 | `Resource\ResourceUpdateNotifier` | отправляет `notifications/resources/updated` |
 | `Apps\McpAppsConfigurator`, `Apps\AppDefinition` | MCP Apps (`ui://` resources) |
 | `Testing\McpTester`, `Testing\McpErrorException`, `Testing\SchemaSnapshot` | in-process клиент и снимок контракта |
+| `Configuration\ServerOptions`, `Configuration\ServerComponentResolver` | для пакетов фреймворков: параметры сервера → аргументы фабрики и компоненты |
+| `Testing\AdapterContract`, `Testing\AdapterContractViolation`, `Testing\AdapterContractTool`, `Testing\AdapterContractDependency` | для пакетов фреймворков: поведение, которое обязан держать каждый адаптер |
 | `Exception\DuplicateCapabilityException` | две capability с одной identity; сборка падает |
 | `Exception\InvalidToolClassException` | класс tools отсутствует или не имеет атрибутов capability |
 | `Exception\SessionOwnershipException` | вызов пришёл не от владельца session |
