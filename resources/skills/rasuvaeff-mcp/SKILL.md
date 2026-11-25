@@ -45,9 +45,9 @@ stateless era: read the era with care, never assume a session persists.
    `new ToolCallBudgetInterceptor(budget: N, cache: $psr16, window: 3600)` rejects
    calls past N: per session on the handshake era, per client id and fixed window
    on the stateless era (counted in the PSR-16 cache; anonymous callers share one
-   budget; a cache outage rejects). It is anti-loop, NOT a client quota; for real
-   quotas implement `ToolCallLimiterInterface` + `RateLimitInterceptor`
-   (limiter failure is fail-closed).
+   budget; a cache outage or a failed write rejects). It is anti-loop, NOT a
+   client quota; for real quotas implement `ToolCallLimiterInterface` +
+   `RateLimitInterceptor` (limiter failure is fail-closed).
 
 4. **Mask arguments before logging/tracing/auditing.** Never log
    `ToolCallContext::$arguments` raw — pass them through `ArgumentMasker`

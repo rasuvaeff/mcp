@@ -116,7 +116,10 @@ at zero on every request — so with `modern_era` on, a budget requires a
 `Psr\SimpleCache\CacheInterface` in the container (a missing one fails the
 build). Without `SharedSecretMiddleware` there is no client id, and every
 anonymous stateless caller shares **one** budget. A cache outage rejects the
-call (fail-closed).
+call, and so does a write the cache reports as failed (fail-closed): the
+guard must not turn into "unlimited" because the store is down. A counter
+the store keeps as text — Laravel on Redis returns numbers as strings — is
+still counted.
 
 This is loop protection, not a client quota. Client quotas belong to an
 application-level rate limiter. The budget guard is always the outermost
