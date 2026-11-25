@@ -229,6 +229,7 @@ final class ToolCallBudgetInterceptorTest
         yield 'no cache configured' => [null];
         yield 'read fails' => [new FakeCache(throwOnRead: true)];
         yield 'write fails' => [new FakeCache(throwOnWrite: true)];
+        yield 'write reports a failure' => [new FakeCache(failOnWrite: true)];
     }
 
     public function namespacesIsolateServersOnOneCache(): void
@@ -329,6 +330,66 @@ final class ToolCallBudgetInterceptorTest
 
         Assert::same($this->modernCall($interceptor, 'alice'), 'ran');
         Assert::same($this->modernCall($interceptor, 'alice'), 'rejected');
+    }
+
+    #[DataProvider('storedCounterProvider')]
+    public function aCounterKeptAsTextStillCounts(mixed $stored, string $expected): void
+    {
+        $cache = new FakeCache();
+        $interceptor = new ToolCallBudgetInterceptor(budget: 3, cache: $cache, clock: static fn(): int => 1000);
+        $this->modernCall($interceptor, 'alice');
+        $cache->values[(string) array_key_first($cache->values)] = $stored;
+
+        Assert::same($this->modernCall($interceptor, 'alice'), $expected);
+    }
+
+    public static function storedCounterProvider(): iterable
+    {
+        yield 'below the budget' => ['2', 'ran'];
+        yield 'at the budget' => ['3', 'rejected'];
+        yield 'beyond the budget' => ['12', 'rejected'];
+        yield 'integer at the budget' => [3, 'rejected'];
+        yield 'trailing newline is not a count' => ["3\n", 'ran'];
+        yield 'prefix is not a count' => ['x3', 'ran'];
+        yield 'suffix is not a count' => ['3x', 'ran'];
+        yield 'array is not a count' => [[3, 4, 5], 'ran'];
+        yield 'true is not a count' => [true, 'ran'];
+    }
+
+    public function aTextCounterGoesOnFromItsValue(): void
+    {
+        $cache = new FakeCache();
+        $interceptor = new ToolCallBudgetInterceptor(budget: 3, cache: $cache, clock: static fn(): int => 1000);
+        $this->modernCall($interceptor, 'alice');
+        $key = (string) array_key_first($cache->values);
+        $cache->values[$key] = '1';
+        $this->modernCall($interceptor, 'alice');
+
+        Assert::same($cache->values[$key], 2);
+    }
+
+    public function aNegativeTextIsNoCredit(): void
+    {
+        $cache = new FakeCache();
+        $interceptor = new ToolCallBudgetInterceptor(budget: 3, cache: $cache, clock: static fn(): int => 1000);
+        $this->modernCall($interceptor, 'alice');
+        $key = (string) array_key_first($cache->values);
+        $cache->values[$key] = '-3';
+        $this->modernCall($interceptor, 'alice');
+
+        Assert::same($cache->values[$key], 1);
+    }
+
+    public function aThrowingWriteKeepsItsCause(): void
+    {
+        $interceptor = new ToolCallBudgetInterceptor(budget: 3, cache: new FakeCache(throwOnWrite: true));
+
+        try {
+            $interceptor->intercept($this->modernContext('alice'), static fn(): string => 'ran');
+            Assert::fail('the call was served');
+        } catch (ToolCallException $e) {
+            Assert::same($e->getPrevious()?->getMessage(), 'cache write failed');
+        }
     }
 
     private function modernCall(ToolCallBudgetInterceptor $interceptor, ?string $clientId): string

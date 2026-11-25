@@ -29,8 +29,8 @@ use Psr\SimpleCache\CacheInterface;
  *   stricter direction, on purpose.
  *
  * Fail-closed: a modern-era call with no cache configured, or a cache backend
- * that throws, is rejected — a guard must not turn into "unlimited" on an
- * outage. An exhausted budget is reported as a regular MCP tool-error
+ * that throws or reports a failed write, is rejected — a guard must not turn
+ * into "unlimited" on an outage. An exhausted budget is reported as a regular MCP tool-error
  * envelope, so the agent sees the reason instead of a transport failure. A
  * failed call still consumes the budget.
  *
@@ -138,7 +138,8 @@ final readonly class ToolCallBudgetInterceptor implements ToolCallInterceptorInt
             throw new ToolCallException('Tool-call budget is unavailable', (int) $e->getCode(), previous: $e);
         }
 
-        $used = is_int($used) ? $used : 0;
+        // a store that keeps numbers as text (Laravel on Redis) returns the counter as a string
+        $used = is_int($used) || (is_string($used) && preg_match('/^\d+\z/', $used) === 1) ? (int) $used : 0;
 
         if ($used >= $this->budget) {
             throw new ToolCallException(sprintf(
@@ -151,9 +152,13 @@ final readonly class ToolCallBudgetInterceptor implements ToolCallInterceptorInt
 
         try {
             // TTL to the end of THIS window — never re-armed past it
-            $this->cache->set($key, $used + 1, ($bucket + 1) * $this->window - $now);
+            $stored = $this->cache->set($key, $used + 1, ($bucket + 1) * $this->window - $now);
         } catch (\Throwable $e) {
             throw new ToolCallException('Tool-call budget is unavailable', (int) $e->getCode(), previous: $e);
+        }
+
+        if (!$stored) {
+            throw new ToolCallException('Tool-call budget is unavailable');
         }
     }
 }
