@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed:** the stateless tool-call budget rejects a call when the cache reports a failed
+  write, and counts on a store that returns numbers as strings (Laravel on Redis); both
+  cases lifted the limit silently (#8).
+
 ## 0.1.2 — 2026-11-25
 
 - **Added:** `Configuration\ServerOptions` and `Configuration\ServerComponentResolver`:

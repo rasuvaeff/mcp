@@ -17,6 +17,7 @@ final class FakeCache implements CacheInterface
     public function __construct(
         private readonly bool $throwOnRead = false,
         private readonly bool $throwOnWrite = false,
+        private readonly bool $failOnWrite = false,
     ) {}
 
     #[\Override]
@@ -34,6 +35,10 @@ final class FakeCache implements CacheInterface
     {
         if ($this->throwOnWrite) {
             throw new \RuntimeException('cache write failed');
+        }
+
+        if ($this->failOnWrite) {
+            return false;
         }
 
         $this->values[$key] = $value;
