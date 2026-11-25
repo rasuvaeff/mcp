@@ -115,8 +115,11 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   the TTL runs to the end of the window. Never key on the client alone with
   `ttl = window`: PSR-16 `set()` re-arms the TTL on every write, so a client
   that keeps calling would never be reset. A null client id is one shared
-  bucket (stricter, on purpose). Missing cache or a throwing backend rejects
-  the call (fail-closed, like `RateLimitInterceptor`). The resolver resolves
+  bucket (stricter, on purpose). Missing cache, a throwing backend or a `set()`
+  that returns `false` rejects the call (fail-closed, like
+  `RateLimitInterceptor`); a counter the store returns as a decimal string is
+  counted — Laravel on Redis keeps numbers as text, and it used to read as an
+  unused budget. The resolver resolves
   `CacheInterface` ONLY when the stateless era is on (3.0.1 was the same class
   of bug with PSR-18), and `session.budget` (the 3.x key) fails the build —
   the package's own params must therefore never ship that key. Era detection
