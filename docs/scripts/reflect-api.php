@@ -255,6 +255,8 @@ $siblings = [
     'yii3-mcp-audit-log-bridge' => 'Rasuvaeff\\Yii3McpAuditLogBridge\\',
     'yii3-mcp-rbac-bridge' => 'Rasuvaeff\\Yii3McpRbacBridge\\',
     'yii3-mcp-telemetry-bridge' => 'Rasuvaeff\\Yii3McpTelemetryBridge\\',
+    'laravel-mcp' => 'Rasuvaeff\\LaravelMcp\\',
+    'symfony-mcp' => 'Rasuvaeff\\SymfonyMcp\\',
 ];
 
 foreach ($siblings as $packageDir => $namespace) {

@@ -33,8 +33,27 @@ function shortName(className) {
     return parts[parts.length - 1]
 }
 
+// Two packages may each have a class of one short name (the adapters' `Guard`):
+// such a page takes its package's namespace part as a prefix, `LaravelMcpGuard`.
+function pageNames(entries) {
+    const count = new Map()
+    for (const entry of entries) {
+        count.set(shortName(entry.class), (count.get(shortName(entry.class)) ?? 0) + 1)
+    }
+
+    return new Map(
+        entries.map((entry) => {
+            const name = shortName(entry.class)
+            const prefix = entry.package.split('\\').slice(1).join('')
+
+            return [entry.class, count.get(name) > 1 ? prefix + name : name]
+        }),
+    )
+}
+
+const pages = pageNames(apiClasses)
 for (const entry of apiClasses) {
-    const name = shortName(entry.class)
+    const name = pages.get(entry.class)
     const pagePath = join(docsDir, 'api', 'classes', `${name}.md`)
     if (!existsSync(pagePath)) {
         fail(`Missing generated API page for @api class "${entry.class}": api/classes/${name}.md`)
@@ -55,7 +74,7 @@ for (const entry of apiClasses) {
 
 // 3. No generated page for a public-but-non-@api class — the reference must
 //    filter by the @api tag, never leak internals.
-const apiShortNames = new Set(apiClasses.map((entry) => shortName(entry.class)))
+const apiShortNames = new Set(pages.values())
 const classesDir = join(docsDir, 'api', 'classes')
 if (existsSync(classesDir)) {
     for (const file of readdirSync(classesDir)) {
@@ -131,6 +150,8 @@ const llmsByPackage = {
     'Rasuvaeff\\Yii3McpAuditLogBridge': join(pkgDir, 'docs', 'siblings', 'yii3-mcp-audit-log-bridge', 'llms.txt'),
     'Rasuvaeff\\Yii3McpRbacBridge': join(pkgDir, 'docs', 'siblings', 'yii3-mcp-rbac-bridge', 'llms.txt'),
     'Rasuvaeff\\Yii3McpTelemetryBridge': join(pkgDir, 'docs', 'siblings', 'yii3-mcp-telemetry-bridge', 'llms.txt'),
+    'Rasuvaeff\\LaravelMcp': join(pkgDir, 'docs', 'siblings', 'laravel-mcp', 'llms.txt'),
+    'Rasuvaeff\\SymfonyMcp': join(pkgDir, 'docs', 'siblings', 'symfony-mcp', 'llms.txt'),
 }
 // Monorepo-local fallback when siblings/ was not populated (local dev).
 const monorepoFallback = {
@@ -139,6 +160,8 @@ const monorepoFallback = {
     'Rasuvaeff\\Yii3McpAuditLogBridge': join(dirname(pkgDir), 'yii3-mcp-audit-log-bridge', 'llms.txt'),
     'Rasuvaeff\\Yii3McpRbacBridge': join(dirname(pkgDir), 'yii3-mcp-rbac-bridge', 'llms.txt'),
     'Rasuvaeff\\Yii3McpTelemetryBridge': join(dirname(pkgDir), 'yii3-mcp-telemetry-bridge', 'llms.txt'),
+    'Rasuvaeff\\LaravelMcp': join(dirname(pkgDir), 'laravel-mcp', 'llms.txt'),
+    'Rasuvaeff\\SymfonyMcp': join(dirname(pkgDir), 'symfony-mcp', 'llms.txt'),
 }
 
 for (const entry of apiClasses) {

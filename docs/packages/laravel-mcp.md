@@ -29,8 +29,8 @@ composer require rasuvaeff/laravel-mcp
 
 | Class | Role |
 |---|---|
-| `McpServiceProvider` | Bindings, config, route and commands. |
-| `HttpEndpoint` | Route action: guard, then the MCP endpoint. |
-| `Guard` | `secret` or `oauth`. |
+| [`McpServiceProvider`](/api/classes/McpServiceProvider) | Bindings, config, route and commands. |
+| [`HttpEndpoint`](/api/classes/HttpEndpoint) | Route action: guard, then the MCP endpoint. |
+| [`Guard`](/api/classes/LaravelMcpGuard) | `secret` or `oauth`. |
 
 Runtime classes are in [`rasuvaeff/mcp`](/packages/mcp).

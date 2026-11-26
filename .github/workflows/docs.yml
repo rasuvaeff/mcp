@@ -77,6 +77,20 @@ jobs:
           path: docs/siblings/yii3-mcp-telemetry-bridge
           persist-credentials: false
 
+      - name: Checkout laravel-mcp
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: rasuvaeff/laravel-mcp
+          path: docs/siblings/laravel-mcp
+          persist-credentials: false
+
+      - name: Checkout symfony-mcp
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: rasuvaeff/symfony-mcp
+          path: docs/siblings/symfony-mcp
+          persist-credentials: false
+
       - name: Setup PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
@@ -97,7 +111,7 @@ jobs:
 
       - name: Install PHP dependencies (other packages)
         run: |
-          for pkg in mcp-openapi yii3-mcp yii3-mcp-audit-log-bridge yii3-mcp-rbac-bridge yii3-mcp-telemetry-bridge; do
+          for pkg in mcp-openapi yii3-mcp yii3-mcp-audit-log-bridge yii3-mcp-rbac-bridge yii3-mcp-telemetry-bridge laravel-mcp symfony-mcp; do
             composer install --no-interaction --no-progress --prefer-dist --working-dir="docs/siblings/$pkg"
           done
 

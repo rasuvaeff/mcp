@@ -1,5 +1,299 @@
 [
     {
+        "class": "Rasuvaeff\\LaravelMcp\\AutowiringContainer",
+        "package": "Rasuvaeff\\LaravelMcp",
+        "kind": "class",
+        "isApi": false,
+        "summary": "Laravel's container answers `has()` for BOUND ids only, although it builds\nany concrete class. The SDK asks `has()` before it resolves a tool class and\notherwise instantiates it without dependencies.\n\nThe cache it answers with keeps the types of numbers, see TypedCache.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "get",
+                "static": false,
+                "params": [
+                    {
+                        "name": "id",
+                        "type": "string",
+                        "description": ""
+                    }
+                ],
+                "returnType": "mixed",
+                "summary": ""
+            },
+            {
+                "name": "has",
+                "static": false,
+                "params": [
+                    {
+                        "name": "id",
+                        "type": "string",
+                        "description": ""
+                    }
+                ],
+                "returnType": "bool",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\LaravelMcp\\Guard",
+        "package": "Rasuvaeff\\LaravelMcp",
+        "kind": "enum",
+        "isApi": true,
+        "summary": "What protects the endpoint, the `guard` config value.",
+        "extends": null,
+        "publicProperties": [
+            {
+                "name": "name",
+                "type": "string",
+                "readonly": true
+            },
+            {
+                "name": "value",
+                "type": "string",
+                "readonly": true
+            }
+        ],
+        "publicMethods": [
+            {
+                "name": "fromConfig",
+                "static": true,
+                "params": [
+                    {
+                        "name": "value",
+                        "type": "mixed",
+                        "description": ""
+                    }
+                ],
+                "returnType": "Rasuvaeff\\LaravelMcp\\Guard",
+                "summary": "The `guard` value: an empty one (an unset environment variable) is not taken for the default."
+            },
+            {
+                "name": "cases",
+                "static": true,
+                "params": [],
+                "returnType": "array",
+                "summary": ""
+            },
+            {
+                "name": "from",
+                "static": true,
+                "params": [
+                    {
+                        "name": "value",
+                        "type": "string|int",
+                        "description": ""
+                    }
+                ],
+                "returnType": "static",
+                "summary": ""
+            },
+            {
+                "name": "tryFrom",
+                "static": true,
+                "params": [
+                    {
+                        "name": "value",
+                        "type": "string|int",
+                        "description": ""
+                    }
+                ],
+                "returnType": "?static",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\LaravelMcp\\HttpEndpoint",
+        "package": "Rasuvaeff\\LaravelMcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "The route action: the guard, then McpAction, over PSR-7.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "__invoke",
+                "static": false,
+                "params": [
+                    {
+                        "name": "request",
+                        "type": "Illuminate\\Http\\Request",
+                        "description": ""
+                    }
+                ],
+                "returnType": "Symfony\\Component\\HttpFoundation\\Response",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\LaravelMcp\\McpServiceProvider",
+        "package": "Rasuvaeff\\LaravelMcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "Wires `rasuvaeff/mcp` into Laravel from the `rasuvaeff-mcp` config file.\n\nWhat serves one request is `scoped`: under Octane the server is built from\nthe sandbox application of that request and dropped with it. What outlives a\nrequest by design (sessions on disk, the notification bus) is a singleton.",
+        "extends": "Illuminate\\Support\\ServiceProvider",
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "register",
+                "static": false,
+                "params": [],
+                "returnType": "void",
+                "summary": ""
+            },
+            {
+                "name": "boot",
+                "static": false,
+                "params": [
+                    {
+                        "name": "router",
+                        "type": "Illuminate\\Routing\\Router",
+                        "description": ""
+                    }
+                ],
+                "returnType": "void",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\LaravelMcp\\TypedCache",
+        "package": "Rasuvaeff\\LaravelMcp",
+        "kind": "class",
+        "isApi": false,
+        "summary": "Laravel's Redis store writes a number as is and returns it as a string. The\ncounters of the call budget and of the notification bus are compared as\nintegers, so a value travels inside an array, which is always serialized.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "get",
+                "static": false,
+                "params": [
+                    {
+                        "name": "key",
+                        "type": "string",
+                        "description": ""
+                    },
+                    {
+                        "name": "default",
+                        "type": "mixed",
+                        "description": ""
+                    }
+                ],
+                "returnType": "mixed",
+                "summary": ""
+            },
+            {
+                "name": "set",
+                "static": false,
+                "params": [
+                    {
+                        "name": "key",
+                        "type": "string",
+                        "description": ""
+                    },
+                    {
+                        "name": "value",
+                        "type": "mixed",
+                        "description": ""
+                    },
+                    {
+                        "name": "ttl",
+                        "type": "DateInterval|int|null",
+                        "description": ""
+                    }
+                ],
+                "returnType": "bool",
+                "summary": ""
+            },
+            {
+                "name": "delete",
+                "static": false,
+                "params": [
+                    {
+                        "name": "key",
+                        "type": "string",
+                        "description": ""
+                    }
+                ],
+                "returnType": "bool",
+                "summary": ""
+            },
+            {
+                "name": "clear",
+                "static": false,
+                "params": [],
+                "returnType": "bool",
+                "summary": ""
+            },
+            {
+                "name": "getMultiple",
+                "static": false,
+                "params": [
+                    {
+                        "name": "keys",
+                        "type": "iterable",
+                        "description": ""
+                    },
+                    {
+                        "name": "default",
+                        "type": "mixed",
+                        "description": ""
+                    }
+                ],
+                "returnType": "iterable",
+                "summary": ""
+            },
+            {
+                "name": "setMultiple",
+                "static": false,
+                "params": [
+                    {
+                        "name": "values",
+                        "type": "iterable",
+                        "description": ""
+                    },
+                    {
+                        "name": "ttl",
+                        "type": "DateInterval|int|null",
+                        "description": ""
+                    }
+                ],
+                "returnType": "bool",
+                "summary": ""
+            },
+            {
+                "name": "deleteMultiple",
+                "static": false,
+                "params": [
+                    {
+                        "name": "keys",
+                        "type": "iterable",
+                        "description": ""
+                    }
+                ],
+                "returnType": "bool",
+                "summary": ""
+            },
+            {
+                "name": "has",
+                "static": false,
+                "params": [
+                    {
+                        "name": "key",
+                        "type": "string",
+                        "description": ""
+                    }
+                ],
+                "returnType": "bool",
+                "summary": ""
+            }
+        ]
+    },
+    {
         "class": "Rasuvaeff\\Mcp\\Apps\\AppDefinition",
         "package": "Rasuvaeff\\Mcp",
         "kind": "class",
@@ -3955,6 +4249,268 @@
                     }
                 ],
                 "returnType": "bool",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\SymfonyMcp\\Configuration",
+        "package": "Rasuvaeff\\SymfonyMcp",
+        "kind": "class",
+        "isApi": false,
+        "summary": "The keys and their meaning belong to rasuvaeff/mcp and\nrasuvaeff/mcp-openapi, which validate them when the server is built: a\nsecond schema here would have to follow every one of them, and an `%env()%`\nvalue has no type yet. Nested keys are kept as written \u2014 a tool named\n\"a-b\" must not become \"a_b\". A later file replaces a top-level key as a whole.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "getConfigTreeBuilder",
+                "static": false,
+                "params": [],
+                "returnType": "Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\SymfonyMcp\\Guard",
+        "package": "Rasuvaeff\\SymfonyMcp",
+        "kind": "enum",
+        "isApi": true,
+        "summary": "What protects the endpoint, the `guard` option.",
+        "extends": null,
+        "publicProperties": [
+            {
+                "name": "name",
+                "type": "string",
+                "readonly": true
+            },
+            {
+                "name": "value",
+                "type": "string",
+                "readonly": true
+            }
+        ],
+        "publicMethods": [
+            {
+                "name": "fromConfig",
+                "static": true,
+                "params": [
+                    {
+                        "name": "value",
+                        "type": "mixed",
+                        "description": ""
+                    }
+                ],
+                "returnType": "Rasuvaeff\\SymfonyMcp\\Guard",
+                "summary": "The `guard` value: an empty one (an unset environment variable) is not taken for the default."
+            },
+            {
+                "name": "cases",
+                "static": true,
+                "params": [],
+                "returnType": "array",
+                "summary": ""
+            },
+            {
+                "name": "from",
+                "static": true,
+                "params": [
+                    {
+                        "name": "value",
+                        "type": "string|int",
+                        "description": ""
+                    }
+                ],
+                "returnType": "static",
+                "summary": ""
+            },
+            {
+                "name": "tryFrom",
+                "static": true,
+                "params": [
+                    {
+                        "name": "value",
+                        "type": "string|int",
+                        "description": ""
+                    }
+                ],
+                "returnType": "?static",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\SymfonyMcp\\McpController",
+        "package": "Rasuvaeff\\SymfonyMcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "The route action: the guard, then the MCP endpoint, over PSR-7.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "__invoke",
+                "static": false,
+                "params": [
+                    {
+                        "name": "request",
+                        "type": "Symfony\\Component\\HttpFoundation\\Request",
+                        "description": ""
+                    }
+                ],
+                "returnType": "Symfony\\Component\\HttpFoundation\\Response",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\SymfonyMcp\\McpRuntime",
+        "package": "Rasuvaeff\\SymfonyMcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "Builds the server from the bundle options. Everything is built on first use,\nnever while the container is compiled, so `%env()%` values are read at run\ntime. What serves one request is dropped by `reset()` between requests of a\nworker; sessions on disk and the notification bus stay.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "options",
+                "static": false,
+                "params": [],
+                "returnType": "Rasuvaeff\\Mcp\\Configuration\\ServerOptions",
+                "summary": ""
+            },
+            {
+                "name": "sessionStore",
+                "static": false,
+                "params": [],
+                "returnType": "Mcp\\Server\\Session\\SessionStoreInterface",
+                "summary": ""
+            },
+            {
+                "name": "notificationBus",
+                "static": false,
+                "params": [],
+                "returnType": "?Mcp\\Server\\Subscription\\NotificationBusInterface",
+                "summary": ""
+            },
+            {
+                "name": "server",
+                "static": false,
+                "params": [],
+                "returnType": "Mcp\\Server\\Server",
+                "summary": ""
+            },
+            {
+                "name": "action",
+                "static": false,
+                "params": [],
+                "returnType": "Rasuvaeff\\Mcp\\McpAction",
+                "summary": ""
+            },
+            {
+                "name": "guard",
+                "static": false,
+                "params": [],
+                "returnType": "Psr\\Http\\Server\\MiddlewareInterface",
+                "summary": ""
+            },
+            {
+                "name": "oauthMetadataHandler",
+                "static": false,
+                "params": [],
+                "returnType": "Mcp\\Server\\Transport\\Http\\OAuth\\ProtectedResourceMetadataHandler",
+                "summary": ""
+            },
+            {
+                "name": "reset",
+                "static": false,
+                "params": [],
+                "returnType": "void",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\SymfonyMcp\\RasuvaeffMcpBundle",
+        "package": "Rasuvaeff\\SymfonyMcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "Wires `rasuvaeff/mcp` into Symfony from the `rasuvaeff_mcp` options.",
+        "extends": "Symfony\\Component\\HttpKernel\\Bundle\\Bundle",
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "getContainerExtension",
+                "static": false,
+                "params": [],
+                "returnType": "Symfony\\Component\\DependencyInjection\\Extension\\ExtensionInterface",
+                "summary": ""
+            },
+            {
+                "name": "getPath",
+                "static": false,
+                "params": [],
+                "returnType": "string",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\SymfonyMcp\\RasuvaeffMcpExtension",
+        "package": "Rasuvaeff\\SymfonyMcp",
+        "kind": "class",
+        "isApi": false,
+        "summary": "Registers the services from the `rasuvaeff_mcp` options.",
+        "extends": "Symfony\\Component\\DependencyInjection\\Extension\\Extension",
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "getAlias",
+                "static": false,
+                "params": [],
+                "returnType": "string",
+                "summary": ""
+            },
+            {
+                "name": "load",
+                "static": false,
+                "params": [
+                    {
+                        "name": "configs",
+                        "type": "array",
+                        "description": ""
+                    },
+                    {
+                        "name": "container",
+                        "type": "Symfony\\Component\\DependencyInjection\\ContainerBuilder",
+                        "description": ""
+                    }
+                ],
+                "returnType": "void",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\SymfonyMcp\\ServiceClasses",
+        "package": "Rasuvaeff\\SymfonyMcp",
+        "kind": "class",
+        "isApi": false,
+        "summary": "Every service the options name. Symfony hands out private services only\nthrough a locator, so the classes must be known when the container is built.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "fromParams",
+                "static": true,
+                "params": [
+                    {
+                        "name": "params",
+                        "type": "array",
+                        "description": ""
+                    }
+                ],
+                "returnType": "array",
                 "summary": ""
             }
         ]

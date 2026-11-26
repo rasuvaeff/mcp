@@ -12,6 +12,8 @@ const REPO_BLOB = {
     'Rasuvaeff\\Yii3McpAuditLogBridge': 'https://github.com/rasuvaeff/yii3-mcp-audit-log-bridge/blob/master/',
     'Rasuvaeff\\Yii3McpRbacBridge': 'https://github.com/rasuvaeff/yii3-mcp-rbac-bridge/blob/master/',
     'Rasuvaeff\\Yii3McpTelemetryBridge': 'https://github.com/rasuvaeff/yii3-mcp-telemetry-bridge/blob/master/',
+    'Rasuvaeff\\LaravelMcp': 'https://github.com/rasuvaeff/laravel-mcp/blob/master/',
+    'Rasuvaeff\\SymfonyMcp': 'https://github.com/rasuvaeff/symfony-mcp/blob/master/',
 }
 
 function sourcePath(className, namespacePrefix) {
@@ -23,11 +25,29 @@ function shortName(className) {
     return parts[parts.length - 1]
 }
 
+// Two packages may each have a class of one short name (the adapters' `Guard`):
+// such a page takes its package's namespace part as a prefix, `LaravelMcpGuard`.
+function pageNames(entries) {
+    const count = new Map()
+    for (const entry of entries) {
+        count.set(shortName(entry.class), (count.get(shortName(entry.class)) ?? 0) + 1)
+    }
+
+    return new Map(
+        entries.map((entry) => {
+            const name = shortName(entry.class)
+            const prefix = entry.package.split('\\').slice(1).join('')
+
+            return [entry.class, count.get(name) > 1 ? prefix + name : name]
+        }),
+    )
+}
+
 function shortenType(type) {
     if (type === undefined || type === null) {
         return 'mixed'
     }
-    return type.replaceAll(/Rasuvaeff\\(Mcp\\OpenApi|Mcp|Yii3Mcp(AuditLogBridge|RbacBridge|TelemetryBridge)?)\\/g, '')
+    return type.replaceAll(/Rasuvaeff\\(Mcp\\OpenApi|Mcp|Yii3Mcp(AuditLogBridge|RbacBridge|TelemetryBridge)?|LaravelMcp|SymfonyMcp)\\/g, '')
 }
 
 function formatParams(params) {
@@ -171,6 +191,8 @@ function packageSlug(namespace) {
             'Rasuvaeff\\Yii3McpAuditLogBridge': 'audit-log-bridge',
             'Rasuvaeff\\Yii3McpRbacBridge': 'rbac-bridge',
             'Rasuvaeff\\Yii3McpTelemetryBridge': 'telemetry-bridge',
+            'Rasuvaeff\\LaravelMcp': 'laravel-mcp',
+            'Rasuvaeff\\SymfonyMcp': 'symfony-mcp',
         }[namespace] ?? namespace
     )
 }
@@ -191,8 +213,9 @@ const apiEntries = snapshot.filter((entry) => entry.isApi)
 const outDir = join(docsDir, 'api', 'classes')
 mkdirSync(outDir, { recursive: true })
 clean(outDir)
+const pages = pageNames(apiEntries)
 for (const entry of apiEntries) {
-    const outPath = join(outDir, `${shortName(entry.class)}.md`)
+    const outPath = join(outDir, `${pages.get(entry.class)}.md`)
     writeFileSync(outPath, renderClass(entry) + '\n', 'utf8')
 }
 

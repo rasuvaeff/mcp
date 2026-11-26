@@ -29,9 +29,9 @@ composer require rasuvaeff/symfony-mcp
 
 | Class | Role |
 |---|---|
-| `RasuvaeffMcpBundle` | The bundle. |
-| `McpController` | Route action: guard, then the MCP endpoint. |
-| `McpRuntime` | Builds and resets the server. |
-| `Guard` | `secret` or `oauth`. |
+| [`RasuvaeffMcpBundle`](/api/classes/RasuvaeffMcpBundle) | The bundle. |
+| [`McpController`](/api/classes/McpController) | Route action: guard, then the MCP endpoint. |
+| [`McpRuntime`](/api/classes/McpRuntime) | Builds and resets the server. |
+| [`Guard`](/api/classes/SymfonyMcpGuard) | `secret` or `oauth`. |
 
 Runtime classes are in [`rasuvaeff/mcp`](/packages/mcp).
