@@ -33,7 +33,7 @@ features:
     details: Allow-listed OpenAPI operations become MCP tools with zero duplication — real HTTP calls through the upstream's own middleware stack.
     link: /openapi-bridge
   - title: Yii3, Laravel, Symfony
-    details: One runtime and one set of options in three frameworks. Checked on FrankenPHP, Swoole and RoadRunner, with Redis across nodes and Keycloak as the OAuth server.
+    details: One runtime and one set of options in three frameworks. The Laravel and Symfony packages are checked on FrankenPHP, Swoole and RoadRunner (a listen stream arrives whole there), with Redis across nodes and Keycloak as the OAuth server.
     link: /laravel/getting-started
   - title: Audit, RBAC, telemetry — orthogonal bridges
     details: Three companion packages plug into the same interceptor chain as ordinary interceptors. Combine any subset.
