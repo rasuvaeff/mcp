@@ -33,6 +33,14 @@ const sidebar = [
         ],
     },
     {
+        text: 'Laravel',
+        items: [{ text: 'Getting started', link: '/laravel/getting-started' }],
+    },
+    {
+        text: 'Symfony',
+        items: [{ text: 'Getting started', link: '/symfony/getting-started' }],
+    },
+    {
         text: 'Bridges',
         items: [
             { text: 'Overview', link: '/bridges/overview' },
@@ -47,6 +55,8 @@ const sidebar = [
             { text: 'mcp', link: '/packages/mcp' },
             { text: 'mcp-openapi', link: '/packages/mcp-openapi' },
             { text: 'yii3-mcp', link: '/packages/yii3-mcp' },
+            { text: 'laravel-mcp', link: '/packages/laravel-mcp' },
+            { text: 'symfony-mcp', link: '/packages/symfony-mcp' },
             { text: 'yii3-mcp-audit-log-bridge', link: '/packages/audit-log-bridge' },
             { text: 'yii3-mcp-rbac-bridge', link: '/packages/rbac-bridge' },
             { text: 'yii3-mcp-telemetry-bridge', link: '/packages/telemetry-bridge' },
@@ -70,7 +80,7 @@ const SITE_URL = 'https://rasuvaeff.github.io/mcp/'
 export default defineConfig({
     title: 'PHP MCP',
     description:
-        'MCP (Model Context Protocol) server runtime for PHP: expose application tools, resources and prompts to AI agents like Claude Code and Claude Desktop over Streamable HTTP — with an OpenAPI bridge, session security, Yii3 integration, and audit log, RBAC and telemetry bridges.',
+        'MCP (Model Context Protocol) server runtime for PHP: expose application tools, resources and prompts to AI agents like Claude Code and Claude Desktop over Streamable HTTP — with an OpenAPI bridge, session security, Yii3, Laravel and Symfony integrations, and audit log, RBAC and telemetry bridges.',
     base: '/mcp/',
     cleanUrls: true,
     lastUpdated: true,
@@ -114,6 +124,8 @@ export default defineConfig({
         nav: [
             { text: 'Guide', link: '/intro/what-is-mcp' },
             { text: 'Yii3', link: '/yii3/getting-started' },
+            { text: 'Laravel', link: '/laravel/getting-started' },
+            { text: 'Symfony', link: '/symfony/getting-started' },
             { text: 'Bridges', link: '/bridges/overview' },
             { text: 'API', link: '/api/index' },
             { text: 'GitHub', link: 'https://github.com/rasuvaeff/mcp' },

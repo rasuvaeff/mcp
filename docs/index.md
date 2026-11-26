@@ -5,7 +5,7 @@ description: MCP server runtime for PHP — expose your application's tools, res
 hero:
   name: PHP MCP
   text: Expose your PHP application to AI agents, safely.
-  tagline: Framework-neutral MCP server runtime over the official mcp/sdk — with an OpenAPI bridge, Yii3 integration, and audit log, RBAC and telemetry bridges.
+  tagline: Framework-neutral MCP server runtime over the official mcp/sdk — with an OpenAPI bridge, Yii3, Laravel and Symfony integrations, and audit log, RBAC and telemetry bridges.
   image:
     src: /logo-mark.svg
     alt: PHP MCP logo
@@ -32,6 +32,9 @@ features:
   - title: Bridge an existing REST API
     details: Allow-listed OpenAPI operations become MCP tools with zero duplication — real HTTP calls through the upstream's own middleware stack.
     link: /openapi-bridge
+  - title: Yii3, Laravel, Symfony
+    details: One runtime and one set of options in three frameworks. The Laravel and Symfony packages are checked on FrankenPHP, Swoole and RoadRunner (a listen stream arrives whole there), with Redis across nodes and Keycloak as the OAuth server.
+    link: /laravel/getting-started
   - title: Audit, RBAC, telemetry — orthogonal bridges
     details: Three companion packages plug into the same interceptor chain as ordinary interceptors. Combine any subset.
     link: /bridges/overview
