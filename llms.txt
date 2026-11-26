@@ -313,6 +313,9 @@ public function cancel(string $orderId, RequestContext $context): string
   'notifications' => ['bus' => ''|'psr16'|'psr6'|'memory', 'subscription_lifetime' => 30]):
   every stateless subscriptions/listen stream whose filter names the URI gets
   it, from any process — no $context needed (queue worker, console).
+- Listen streams: only PHP's own output buffers are ended before the stream;
+  Swoole streams live, RoadRunner (PSR-7 capture) delivers the stream when it
+  ends; a runner answering through STDOUT with no capture buffer is unsupported.
 - With a handshake-era $context: checks the session subscription first (never
   unsolicited) and notifies the CALLING session only.
 - Handshake sessions: reaches ONLY the calling session. `SubscriptionManagerInterface` is bound in

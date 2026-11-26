@@ -20,6 +20,10 @@ use Psr\Http\Message\StreamInterface;
  * transport calls `ob_flush()` itself and is unaffected; ending the buffers
  * first is harmless for it.
  *
+ * Only buffers PHP opened itself (`default output handler`) are ended, top
+ * down: the release stops at the first buffer with a handler of its own.
+ * Under RoadRunner that is the PSR-7 capture, so a stream arrives in one
+ * piece when it ends (#11).
  * Buffers are ended down to `$baseLevel` (0 — all of them — in production);
  * a non-removable buffer stops the release.
  *
@@ -27,6 +31,8 @@ use Psr\Http\Message\StreamInterface;
  */
 final readonly class OutputBufferReleasingStream implements StreamInterface
 {
+    private const string PHP_HANDLER = 'default output handler';
+
     public function __construct(
         private StreamInterface $inner,
         private int $baseLevel = 0,
@@ -131,6 +137,13 @@ final readonly class OutputBufferReleasingStream implements StreamInterface
     private function release(): void
     {
         while (ob_get_level() > $this->baseLevel) {
+            // a buffer with a handler of its own is how a long-running server
+            // (Swoole, the PSR-7 capture under RoadRunner) receives the
+            // response: ending it sends the frames to the worker's stdout
+            if ((ob_get_status()['name'] ?? '') !== self::PHP_HANDLER) {
+                return;
+            }
+
             // a non-removable buffer refuses with a notice and stays: stop there
             if (!@ob_end_flush()) {
                 return;

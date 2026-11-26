@@ -27,12 +27,11 @@ formatted CallToolResult.
 
 The client identity of a call comes FROM THE SESSION first
 (self::CLIENT_ID_SESSION_KEY — the immutable owner
-\Rasuvaeff\Mcp\McpAction stamps at `initialize`), so it travels
-with the request instead of through process state and stays correct even in
-a concurrent (Fiber-interleaving) runtime. The process-local
-RequestIdentity is only the fallback for sessions that carry
-no owner yet (a pre-ownership session, an embedding without McpAction) —
-in that case the id is mirrored into the session on first use. When both
+\Rasuvaeff\Mcp\McpAction stamps at `initialize`), then
+from the request itself (\Rasuvaeff\Mcp\Identity\RequestIdentity)
+when the session carries no owner — always so on the stateless era; the id
+is then mirrored into the session on first use. Neither is process state,
+so both stay correct in a Fiber-interleaving runtime. When both
 are present and DISAGREE, the call fails closed with
 SessionOwnershipException: a session must never be re-attributed to
 another client. This check runs before visibility, so a foreign session is

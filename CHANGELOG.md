@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — 2026-11-26
+
+- **Fixed:** a `subscriptions/listen` stream no longer ends an output buffer that belongs to
+  the server. Under RoadRunner it killed the worker, under Swoole the frames were lost; now
+  only the buffers PHP opened itself are ended. Under RoadRunner the stream arrives in one
+  piece when it ends (#11).
+
 ## 0.1.3 — 2026-11-25
 
 - **Fixed:** the stateless tool-call budget rejects a call when the cache reports a failed
