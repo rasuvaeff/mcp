@@ -75,6 +75,56 @@ final class OutputBufferReleasingStreamTest
         Assert::null($inner->getSize());
     }
 
+    public function aBufferWithAHandlerOfItsOwnStaysAndReceivesTheFrames(): void
+    {
+        $received = '';
+        ob_start(static function (string $chunk) use (&$received): string {
+            $received .= $chunk;
+
+            return '';
+        }, 1);
+        $base = ob_get_level() - 1;
+        $serverLevel = ob_get_level();
+
+        try {
+            ob_start();
+            echo 'pending|';
+
+            $stream = new OutputBufferReleasingStream(new CallbackStream(static function () use (&$levelAtWrite): void {
+                $levelAtWrite = ob_get_level();
+                echo 'frame';
+            }), $base);
+
+            Assert::same($stream->getContents(), '');
+            Assert::same($levelAtWrite, $serverLevel);
+        } finally {
+            while (ob_get_level() > $base) {
+                ob_end_clean();
+            }
+        }
+
+        Assert::same($received, 'pending|frame');
+    }
+
+    public function aBufferOfItsOwnBelowStopsTheRelease(): void
+    {
+        $base = ob_get_level();
+        ob_start(static fn(string $chunk): string => $chunk);
+        $serverLevel = ob_get_level();
+        ob_start();
+        ob_start();
+
+        try {
+            Assert::same((new OutputBufferReleasingStream(new CallbackStream(static function (): void {}), $base))->getContents(), '');
+
+            Assert::same(ob_get_level(), $serverLevel);
+        } finally {
+            while (ob_get_level() > $base) {
+                ob_end_clean();
+            }
+        }
+    }
+
     /**
      * @param \Closure(OutputBufferReleasingStream): string $consume
      */
