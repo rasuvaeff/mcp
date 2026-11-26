@@ -7,8 +7,10 @@ namespace Rasuvaeff\Mcp\Tests;
 use Mcp\Server\Transport\CallbackStream;
 use Nyholm\Psr7\Stream;
 use Rasuvaeff\Mcp\OutputBufferReleasingStream;
+use Rasuvaeff\Mcp\Tests\Support\EchoingStream;
 use Testo\Assert;
 use Testo\Codecov\Covers;
+use Testo\Data\DataProvider;
 use Testo\Test;
 
 #[Test]
@@ -21,19 +23,117 @@ final class OutputBufferReleasingStreamTest
      * the stream closes. Output already sitting in those buffers is passed on
      * in order, not dropped.
      */
-    public function readEndsBuffersAboveTheBaseLevelBeforeTheCallbackWrites(): void
+    /**
+     * @param \Closure(OutputBufferReleasingStream): string $consume
+     */
+    #[DataProvider('consumers')]
+    public function underAServerSapiTheFramesGoOutAsTheyAreWritten(\Closure $consume): void
     {
-        $this->assertReleasedBy(static fn(OutputBufferReleasingStream $stream): string => $stream->read(8192));
+        $this->assertReleasedBy($consume, 'fpm-fcgi', returned: '', sent: 'pending|frame');
     }
 
-    public function getContentsEndsBuffersAboveTheBaseLevelBeforeTheCallbackWrites(): void
+    /**
+     * A CLI worker with no buffer of its own (RoadRunner's PSR7Worker) would
+     * print the frames to its stdout: they come back with the read instead.
+     *
+     * @param \Closure(OutputBufferReleasingStream): string $consume
+     */
+    #[DataProvider('consumers')]
+    public function underTheCliWithNoBufferLeftTheFramesComeBackWithTheRead(\Closure $consume): void
     {
-        $this->assertReleasedBy(static fn(OutputBufferReleasingStream $stream): string => $stream->getContents());
+        $this->assertReleasedBy($consume, 'cli', returned: 'frame', sent: 'pending|');
     }
 
-    public function castingToStringEndsBuffersAboveTheBaseLevelBeforeTheCallbackWrites(): void
+    public static function consumers(): iterable
     {
-        $this->assertReleasedBy(static fn(OutputBufferReleasingStream $stream): string => (string) $stream);
+        yield 'read' => [static fn(OutputBufferReleasingStream $stream): string => $stream->read(8192)];
+        yield 'getContents' => [static fn(OutputBufferReleasingStream $stream): string => $stream->getContents()];
+        yield 'cast to string' => [static fn(OutputBufferReleasingStream $stream): string => (string) $stream];
+    }
+
+    /**
+     * RoadRunner's worker keeps a buffer that sends stdout to its log: the
+     * frames must not end there, they come back with the read.
+     */
+    public function underRoadRunnerTheFramesComeBackPastItsOwnBuffer(): void
+    {
+        $logged = '';
+        ob_start(static function (string $chunk) use (&$logged): string {
+            $logged .= $chunk;
+
+            return '';
+        }, 1);
+        $base = ob_get_level() - 1;
+
+        try {
+            $stream = new OutputBufferReleasingStream(new CallbackStream(static function (): void {
+                echo 'frame';
+                // what the SDK does after each frame
+                @ob_flush();
+                echo '|next';
+            }), $base, 'cli', roadRunner: true);
+
+            Assert::same($stream->getContents(), 'frame|next');
+        } finally {
+            while (ob_get_level() > $base) {
+                ob_end_clean();
+            }
+        }
+
+        Assert::same($logged, '');
+    }
+
+    public function withoutRoadRunnerABufferOfItsOwnStillTakesTheFrames(): void
+    {
+        $received = '';
+        ob_start(static function (string $chunk) use (&$received): string {
+            $received .= $chunk;
+
+            return '';
+        }, 1);
+        $base = ob_get_level() - 1;
+
+        try {
+            $stream = new OutputBufferReleasingStream(new CallbackStream(static function (): void {
+                echo 'frame';
+            }), $base, 'cli', roadRunner: false);
+
+            Assert::same($stream->getContents(), '');
+        } finally {
+            while (ob_get_level() > $base) {
+                ob_end_clean();
+            }
+        }
+
+        Assert::same($received, 'frame');
+    }
+
+    public function whatIsCapturedComesBeforeWhatTheReadReturns(): void
+    {
+        $base = ob_get_level();
+        $inner = new EchoingStream(echoed: 'frames|', returned: 'body');
+
+        Assert::same((new OutputBufferReleasingStream($inner, $base, 'cli', roadRunner: true))->getContents(), 'frames|body');
+        Assert::same(ob_get_level(), $base);
+    }
+
+    public function aReadThatFailsUnderTheCliLeavesNoBufferBehind(): void
+    {
+        $base = ob_get_level();
+        $stream = new OutputBufferReleasingStream(new CallbackStream(static function (): void {
+            echo 'half a frame';
+
+            throw new \RuntimeException('stream broke');
+        }), $base, 'cli', roadRunner: false);
+
+        try {
+            $stream->getContents();
+            Assert::fail('the read did not fail');
+        } catch (\RuntimeException $e) {
+            Assert::same($e->getMessage(), 'stream broke');
+        }
+
+        Assert::same(ob_get_level(), $base);
     }
 
     public function everythingElseIsDelegated(): void
@@ -128,7 +228,7 @@ final class OutputBufferReleasingStreamTest
     /**
      * @param \Closure(OutputBufferReleasingStream): string $consume
      */
-    private function assertReleasedBy(\Closure $consume): void
+    private function assertReleasedBy(\Closure $consume, string $sapi, string $returned, string $sent): void
     {
         // the outer buffer stands in for the SAPI: it collects what got through
         ob_start();
@@ -143,19 +243,19 @@ final class OutputBufferReleasingStreamTest
             $stream = new OutputBufferReleasingStream(new CallbackStream(static function () use (&$levelAtWrite): void {
                 $levelAtWrite = ob_get_level();
                 echo 'frame';
-            }), $base);
+            }), $base, $sapi, roadRunner: false);
 
-            Assert::same($consume($stream), '');
-            Assert::same($levelAtWrite, $base);
+            Assert::same($consume($stream), $returned);
+            Assert::same($levelAtWrite, $sapi === 'cli' ? $base + 1 : $base);
             Assert::same(ob_get_level(), $base);
         } finally {
             while (ob_get_level() > $base) {
                 ob_end_clean();
             }
 
-            $sent = (string) ob_get_clean();
+            $output = (string) ob_get_clean();
         }
 
-        Assert::same($sent, 'pending|frame');
+        Assert::same($output, $sent);
     }
 }
