@@ -29,8 +29,8 @@ What "in a row" means depends on the protocol era:
   stricter direction, on purpose.
 
 Fail-closed: a modern-era call with no cache configured, or a cache backend
-that throws, is rejected — a guard must not turn into "unlimited" on an
-outage. An exhausted budget is reported as a regular MCP tool-error
+that throws or reports a failed write, is rejected — a guard must not turn
+into "unlimited" on an outage. An exhausted budget is reported as a regular MCP tool-error
 envelope, so the agent sees the reason instead of a transport failure. A
 failed call still consumes the budget.
 

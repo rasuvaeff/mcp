@@ -31,37 +31,6 @@ function resolveSiblingPackageDir(string $repoRoot, string $packageDir): ?string
     return null;
 }
 
-/** @var list<array{namespace: string, src: string}> $packages */
-$packages = [
-    ['namespace' => 'Rasuvaeff\\Mcp\\', 'src' => $repoRoot . '/src'],
-];
-
-$siblings = [
-    'mcp-openapi' => 'Rasuvaeff\\Mcp\\OpenApi\\',
-    'yii3-mcp' => 'Rasuvaeff\\Yii3Mcp\\',
-    'yii3-mcp-audit-log-bridge' => 'Rasuvaeff\\Yii3McpAuditLogBridge\\',
-    'yii3-mcp-rbac-bridge' => 'Rasuvaeff\\Yii3McpRbacBridge\\',
-    'yii3-mcp-telemetry-bridge' => 'Rasuvaeff\\Yii3McpTelemetryBridge\\',
-];
-
-foreach ($siblings as $packageDir => $namespace) {
-    $dir = resolveSiblingPackageDir($repoRoot, $packageDir);
-    if ($dir === null) {
-        fwrite(STDERR, "Skipping {$packageDir}: not found under docs/siblings/ or as a monorepo sibling.\n");
-
-        continue;
-    }
-
-    $autoload = $dir . '/vendor/autoload.php';
-    if (!is_file($autoload)) {
-        fwrite(STDERR, "Skipping {$packageDir}: {$autoload} missing — run composer install in it first.\n");
-
-        continue;
-    }
-
-    require $autoload;
-    $packages[] = ['namespace' => $namespace, 'src' => $dir . '/src'];
-}
 
 /**
  * Splits a docblock into its free-text summary/description (everything
@@ -170,94 +139,141 @@ function classNameFromPath(string $srcDir, string $namespace, string $path): str
     return $namespace . $relative;
 }
 
-$report = [];
+/**
+ * Reflects one package right after its own autoloader is registered. Composer
+ * prepends every autoloader it registers, so a class first loaded later would
+ * come from the vendor/ copy of whichever sibling registered last, not from
+ * this package's src/ — the reference then described a published version.
+ *
+ * @param array{namespace: string, src: string} $package
+ * @return list<array<string, mixed>>
+ */
+function reflectPackage(array $package): array
+{
+    $report = [];
+        foreach (findPhpFiles($package['src']) as $path) {
+            $className = classNameFromPath($package['src'], $package['namespace'], $path);
+            if (!class_exists($className) && !interface_exists($className) && !enum_exists($className)) {
+                continue;
+            }
 
-foreach ($packages as $package) {
-    foreach (findPhpFiles($package['src']) as $path) {
-        $className = classNameFromPath($package['src'], $package['namespace'], $path);
-        if (!class_exists($className) && !interface_exists($className) && !enum_exists($className)) {
-            continue;
+            $reflection = new ReflectionClass($className);
+        // a class from another package's vendor/ would document a published version, not this source
+        if (!str_starts_with((string) $reflection->getFileName(), realpath($package['src']) . '/')) {
+            fwrite(STDERR, "{$className} reflects from {$reflection->getFileName()}, not from {$package['src']}\n");
+
+            exit(1);
         }
 
-        $reflection = new ReflectionClass($className);
-        $docComment = $reflection->getDocComment();
-        $isApi = $docComment !== false && str_contains($docComment, '@api');
-        $classDoc = parseDocComment($docComment);
+            $docComment = $reflection->getDocComment();
+            $isApi = $docComment !== false && str_contains($docComment, '@api');
+            $classDoc = parseDocComment($docComment);
 
-        $methods = [];
-        foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-            if ($method->getDeclaringClass()->getName() !== $className) {
-                continue; // inherited, not this class's own contract
-            }
-            if ($method->isConstructor()) {
-                continue; // reported as constructorPromotedProperties below
-            }
+            $methods = [];
+            foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+                if ($method->getDeclaringClass()->getName() !== $className) {
+                    continue; // inherited, not this class's own contract
+                }
+                if ($method->isConstructor()) {
+                    continue; // reported as constructorPromotedProperties below
+                }
 
-            $methodDoc = parseDocComment($method->getDocComment());
+                $methodDoc = parseDocComment($method->getDocComment());
 
-            $params = [];
-            foreach ($method->getParameters() as $param) {
-                $params[] = [
-                    'name' => $param->getName(),
-                    'type' => $param->getType()?->__toString(),
-                    'description' => $methodDoc['params'][$param->getName()] ?? '',
+                $params = [];
+                foreach ($method->getParameters() as $param) {
+                    $params[] = [
+                        'name' => $param->getName(),
+                        'type' => $param->getType()?->__toString(),
+                        'description' => $methodDoc['params'][$param->getName()] ?? '',
+                    ];
+                }
+
+                $methods[] = [
+                    'name' => $method->getName(),
+                    'static' => $method->isStatic(),
+                    'params' => $params,
+                    'returnType' => $method->getReturnType()?->__toString(),
+                    'summary' => $methodDoc['summary'],
                 ];
             }
 
-            $methods[] = [
-                'name' => $method->getName(),
-                'static' => $method->isStatic(),
-                'params' => $params,
-                'returnType' => $method->getReturnType()?->__toString(),
-                'summary' => $methodDoc['summary'],
-            ];
-        }
+            $constructorPromotedProperties = [];
+            $constructor = $reflection->getConstructor();
+            if ($constructor !== null) {
+                foreach ($constructor->getParameters() as $param) {
+                    if (!$param->isPromoted()) {
+                        continue;
+                    }
+                    $property = $reflection->getProperty($param->getName());
+                    if (!$property->isPublic()) {
+                        continue;
+                    }
+                    $constructorPromotedProperties[] = [
+                        'name' => $property->getName(),
+                        'type' => $property->getType()?->__toString(),
+                        'readonly' => $property->isReadOnly(),
+                    ];
+                }
+            }
 
-        $constructorPromotedProperties = [];
-        $constructor = $reflection->getConstructor();
-        if ($constructor !== null) {
-            foreach ($constructor->getParameters() as $param) {
-                if (!$param->isPromoted()) {
+            $declaredPublicProperties = [];
+            foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
+                if ($property->getDeclaringClass()->getName() !== $className) {
                     continue;
                 }
-                $property = $reflection->getProperty($param->getName());
-                if (!$property->isPublic()) {
+                if (in_array($property->getName(), array_column($constructorPromotedProperties, 'name'), true)) {
                     continue;
                 }
-                $constructorPromotedProperties[] = [
+                $declaredPublicProperties[] = [
                     'name' => $property->getName(),
                     'type' => $property->getType()?->__toString(),
                     'readonly' => $property->isReadOnly(),
                 ];
             }
-        }
 
-        $declaredPublicProperties = [];
-        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            if ($property->getDeclaringClass()->getName() !== $className) {
-                continue;
-            }
-            if (in_array($property->getName(), array_column($constructorPromotedProperties, 'name'), true)) {
-                continue;
-            }
-            $declaredPublicProperties[] = [
-                'name' => $property->getName(),
-                'type' => $property->getType()?->__toString(),
-                'readonly' => $property->isReadOnly(),
+            $report[] = [
+                'class' => $className,
+                'package' => trim($package['namespace'], '\\'),
+                'kind' => $reflection->isInterface() ? 'interface' : ($reflection->isEnum() ? 'enum' : 'class'),
+                'isApi' => $isApi,
+                'summary' => $classDoc['summary'],
+                'extends' => ($reflection->getParentClass() ?: null)?->getName(),
+                'publicProperties' => [...$constructorPromotedProperties, ...$declaredPublicProperties],
+                'publicMethods' => $methods,
             ];
         }
 
-        $report[] = [
-            'class' => $className,
-            'package' => trim($package['namespace'], '\\'),
-            'kind' => $reflection->isInterface() ? 'interface' : ($reflection->isEnum() ? 'enum' : 'class'),
-            'isApi' => $isApi,
-            'summary' => $classDoc['summary'],
-            'extends' => ($reflection->getParentClass() ?: null)?->getName(),
-            'publicProperties' => [...$constructorPromotedProperties, ...$declaredPublicProperties],
-            'publicMethods' => $methods,
-        ];
+    return $report;
+}
+
+$report = reflectPackage(['namespace' => 'Rasuvaeff\\Mcp\\', 'src' => $repoRoot . '/src']);
+
+$siblings = [
+    'mcp-openapi' => 'Rasuvaeff\\Mcp\\OpenApi\\',
+    'yii3-mcp' => 'Rasuvaeff\\Yii3Mcp\\',
+    'yii3-mcp-audit-log-bridge' => 'Rasuvaeff\\Yii3McpAuditLogBridge\\',
+    'yii3-mcp-rbac-bridge' => 'Rasuvaeff\\Yii3McpRbacBridge\\',
+    'yii3-mcp-telemetry-bridge' => 'Rasuvaeff\\Yii3McpTelemetryBridge\\',
+];
+
+foreach ($siblings as $packageDir => $namespace) {
+    $dir = resolveSiblingPackageDir($repoRoot, $packageDir);
+    if ($dir === null) {
+        fwrite(STDERR, "Skipping {$packageDir}: not found under docs/siblings/ or as a monorepo sibling.\n");
+
+        continue;
     }
+
+    $autoload = $dir . '/vendor/autoload.php';
+    if (!is_file($autoload)) {
+        fwrite(STDERR, "Skipping {$packageDir}: {$autoload} missing — run composer install in it first.\n");
+
+        continue;
+    }
+
+    require $autoload;
+    $report = [...$report, ...reflectPackage(['namespace' => $namespace, 'src' => $dir . '/src'])];
 }
 
 usort($report, static fn(array $a, array $b): int => $a['class'] <=> $b['class']);

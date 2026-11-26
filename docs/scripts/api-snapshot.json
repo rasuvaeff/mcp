@@ -248,6 +248,191 @@
         ]
     },
     {
+        "class": "Rasuvaeff\\Mcp\\Configuration\\ServerComponentResolver",
+        "package": "Rasuvaeff\\Mcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "Turns server params into the components \\Rasuvaeff\\Mcp\\McpServerFactory\ntakes, resolving every configured class through the container. Shared by the\nframework packages: the keys are the same in each of them.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "resolve",
+                "static": false,
+                "params": [
+                    {
+                        "name": "configurators",
+                        "type": "array",
+                        "description": "applied before the configured ones"
+                    }
+                ],
+                "returnType": "Rasuvaeff\\Mcp\\McpServerComponents",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\Mcp\\Configuration\\ServerOptions",
+        "package": "Rasuvaeff\\Mcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "The scalar server params, validated once: what a typo would otherwise turn\ninto a setting silently ignored fails here, with the param named. Shared by\nthe framework packages: the keys are the same in each of them.",
+        "extends": null,
+        "publicProperties": [
+            {
+                "name": "serverName",
+                "type": "string",
+                "readonly": true
+            },
+            {
+                "name": "protocolVersion",
+                "type": "?Mcp\\Schema\\Enum\\ProtocolVersion",
+                "readonly": true
+            },
+            {
+                "name": "compactToolResults",
+                "type": "bool",
+                "readonly": true
+            },
+            {
+                "name": "notificationBus",
+                "type": "string",
+                "readonly": true
+            },
+            {
+                "name": "cachePolicy",
+                "type": "?Mcp\\Server\\Wire\\CachePolicy",
+                "readonly": true
+            }
+        ],
+        "publicMethods": [
+            {
+                "name": "fromParams",
+                "static": true,
+                "params": [
+                    {
+                        "name": "params",
+                        "type": "array",
+                        "description": ""
+                    }
+                ],
+                "returnType": "Rasuvaeff\\Mcp\\Configuration\\ServerOptions",
+                "summary": ""
+            },
+            {
+                "name": "sessionStore",
+                "static": false,
+                "params": [],
+                "returnType": "Mcp\\Server\\Session\\SessionStoreInterface",
+                "summary": "Owner-only (0700 directory, 0600 files) and application-specific by\ndefault: session JSON holds everything needed to replay a session id."
+            },
+            {
+                "name": "notificationBus",
+                "static": false,
+                "params": [
+                    {
+                        "name": "container",
+                        "type": "Psr\\Container\\ContainerInterface",
+                        "description": ""
+                    }
+                ],
+                "returnType": "?Mcp\\Server\\Subscription\\NotificationBusInterface",
+                "summary": "Null when no bus is configured. The factory and ResourceUpdateNotifier\nmust share ONE instance: a memory bus the notifier publishes to must be\nthe one listen streams read."
+            },
+            {
+                "name": "psr16NotificationBus",
+                "static": false,
+                "params": [
+                    {
+                        "name": "cache",
+                        "type": "Psr\\SimpleCache\\CacheInterface",
+                        "description": ""
+                    }
+                ],
+                "returnType": "Mcp\\Server\\Subscription\\NotificationBusInterface",
+                "summary": ""
+            },
+            {
+                "name": "psr6NotificationBus",
+                "static": false,
+                "params": [
+                    {
+                        "name": "cache",
+                        "type": "Psr\\Cache\\CacheItemPoolInterface",
+                        "description": ""
+                    }
+                ],
+                "returnType": "Mcp\\Server\\Subscription\\NotificationBusInterface",
+                "summary": ""
+            },
+            {
+                "name": "factoryArguments",
+                "static": false,
+                "params": [],
+                "returnType": "array",
+                "summary": "Named constructor arguments of McpServerFactory: everything but\nthe services (container, session store, logger, subscription manager,\nnotification bus, fiber context)."
+            },
+            {
+                "name": "serverFactory",
+                "static": false,
+                "params": [
+                    {
+                        "name": "container",
+                        "type": "Psr\\Container\\ContainerInterface",
+                        "description": ""
+                    },
+                    {
+                        "name": "sessionStore",
+                        "type": "Mcp\\Server\\Session\\SessionStoreInterface",
+                        "description": ""
+                    },
+                    {
+                        "name": "logger",
+                        "type": "?Psr\\Log\\LoggerInterface",
+                        "description": ""
+                    },
+                    {
+                        "name": "subscriptionManager",
+                        "type": "?Mcp\\Server\\Resource\\SubscriptionManagerInterface",
+                        "description": ""
+                    },
+                    {
+                        "name": "notificationBus",
+                        "type": "?Mcp\\Server\\Subscription\\NotificationBusInterface",
+                        "description": ""
+                    },
+                    {
+                        "name": "fiberContext",
+                        "type": "?Mcp\\Server\\Fiber\\FiberContextInterface",
+                        "description": ""
+                    }
+                ],
+                "returnType": "Rasuvaeff\\Mcp\\McpServerFactory",
+                "summary": ""
+            },
+            {
+                "name": "allowedHosts",
+                "static": false,
+                "params": [],
+                "returnType": "array",
+                "summary": ""
+            },
+            {
+                "name": "sharedSecretMiddleware",
+                "static": false,
+                "params": [
+                    {
+                        "name": "responseFactory",
+                        "type": "Psr\\Http\\Message\\ResponseFactoryInterface",
+                        "description": ""
+                    }
+                ],
+                "returnType": "Rasuvaeff\\Mcp\\SharedSecretMiddleware",
+                "summary": ""
+            }
+        ]
+    },
+    {
         "class": "Rasuvaeff\\Mcp\\Exception\\DuplicateCapabilityException",
         "package": "Rasuvaeff\\Mcp",
         "kind": "class",
@@ -282,7 +467,7 @@
         "package": "Rasuvaeff\\Mcp",
         "kind": "class",
         "isApi": false,
-        "summary": "Registry decorator making capability identity collisions a build-time\nerror. The SDK registry is last-write-wins with no duplicate check, and\nits explicit loader runs before the reflected one \u2014 so on a collision one\nregistration silently disappears from the served set while every rule\nkeyed by its name (visibility, cache, RBAC, audit) keeps \"working\" against\nthe wrong handler. McpServerFactory installs this guard on every\nserver it builds, covering ALL registration paths at the single point they\nconverge: attribute tools, configurators, OpenAPI-bridged operations and\nMarkdown prompts alike. Re-registering after an explicit unregister stays\nallowed \u2014 only a duplicate among live registrations throws.",
+        "summary": "Registry decorator making capability identity collisions a build-time\nerror. The SDK registry is last-write-wins with no duplicate check, and\nits explicit loader runs before the reflected one \u2014 so on a collision one\nregistration silently disappears from the served set while every rule\nkeyed by its name (visibility, cache, RBAC, audit) keeps \"working\" against\nthe wrong handler. McpServerFactory installs this guard on every\nserver it builds, covering ALL registration paths at the single point they\nconverge: attribute tools, configurators, OpenAPI-bridged operations and\nconfigurator-registered prompts alike. Re-registering after an explicit unregister stays\nallowed \u2014 only a duplicate among live registrations throws.",
         "extends": null,
         "publicProperties": [],
         "publicMethods": [
@@ -762,6 +947,30 @@
         ]
     },
     {
+        "class": "Rasuvaeff\\Mcp\\Identity\\SessionClient",
+        "package": "Rasuvaeff\\Mcp",
+        "kind": "class",
+        "isApi": false,
+        "summary": "The client id of the current request, resolved into its session before\nanything decides on it: every filtered handler and the reference handler\ncall this first, so visibility sees the same id on both protocol eras.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "resolve",
+                "static": true,
+                "params": [
+                    {
+                        "name": "session",
+                        "type": "?Mcp\\Server\\Session\\SessionInterface",
+                        "description": ""
+                    }
+                ],
+                "returnType": "?string",
+                "summary": "The session's immutable owner wins; the client id the request itself\ncarries (RequestIdentity) covers sessions with no recorded owner \u2014\nalways so on the stateless era \u2014 and is mirrored into the session on\nfirst use. An owner that DISAGREES with the current request's id fails\nclosed: a session is never re-attributed."
+            }
+        ]
+    },
+    {
         "class": "Rasuvaeff\\Mcp\\Identity\\StaticSecretResolver",
         "package": "Rasuvaeff\\Mcp",
         "kind": "class",
@@ -935,7 +1144,7 @@
         "package": "Rasuvaeff\\Mcp",
         "kind": "class",
         "isApi": true,
-        "summary": "Decorates the SDK reference handler with per-session visibility and\ninterceptor chains for every capability call: tools/call, prompts/get and\nresources/read (static resources and templates alike). Visibility is\nfail-closed \u2014 an invisible tool cannot be called even by its exact name,\nand a hidden prompt/resource is reported as not found, indistinguishable\nfrom a missing one.\n\nWith $compactToolResults off, tool results are re-encoded here as\npretty-printed JSON text (ToolResultTextFormatter) \u2014 since SDK 0.10\nthe SDK itself encodes them compactly. With result decorators configured,\nthe result is built here in either mode \u2014 exactly as the SDK's\nCallToolHandler would \u2014 so every ToolResultDecoratorInterface gets a\nformatted CallToolResult.\n\nThe client identity of a call comes FROM THE SESSION first\n(self::CLIENT_ID_SESSION_KEY \u2014 the immutable owner\n\\Rasuvaeff\\Mcp\\McpAction stamps at `initialize`), so it travels\nwith the request instead of through process state and stays correct even in\na concurrent (Fiber-interleaving) runtime. The process-local\nRequestIdentity is only the fallback for sessions that carry\nno owner yet (a pre-ownership session, an embedding without McpAction) \u2014\nin that case the id is mirrored into the session on first use. When both\nare present and DISAGREE, the call fails closed with\nSessionOwnershipException: a session must never be re-attributed to\nanother client. This check runs before visibility, so a foreign session is\nnever consulted for what the caller may see.\n\nThe stored id is attribution, not a live revocation check: if a client's\nsecret is removed from `client_secrets` mid-session, its already-mirrored\nid survives in the session until the session's own TTL expires. Revoking\naccess immediately requires also invalidating the affected sessions.",
+        "summary": "Decorates the SDK reference handler with per-session visibility and\ninterceptor chains for every capability call: tools/call, prompts/get and\nresources/read (static resources and templates alike). Visibility is\nfail-closed \u2014 an invisible tool cannot be called even by its exact name,\nand a hidden prompt/resource is reported as not found, indistinguishable\nfrom a missing one.\n\nWith $compactToolResults off, tool results are re-encoded here as\npretty-printed JSON text (ToolResultTextFormatter) \u2014 since SDK 0.10\nthe SDK itself encodes them compactly. With result decorators configured,\nthe result is built here in either mode \u2014 exactly as the SDK's\nCallToolHandler would \u2014 so every ToolResultDecoratorInterface gets a\nformatted CallToolResult.\n\nThe client identity of a call comes FROM THE SESSION first\n(self::CLIENT_ID_SESSION_KEY \u2014 the immutable owner\n\\Rasuvaeff\\Mcp\\McpAction stamps at `initialize`), then\nfrom the request itself (\\Rasuvaeff\\Mcp\\Identity\\RequestIdentity)\nwhen the session carries no owner \u2014 always so on the stateless era; the id\nis then mirrored into the session on first use. Neither is process state,\nso both stay correct in a Fiber-interleaving runtime. When both\nare present and DISAGREE, the call fails closed with\nSessionOwnershipException: a session must never be re-attributed to\nanother client. This check runs before visibility, so a foreign session is\nnever consulted for what the caller may see.\n\nThe stored id is attribution, not a live revocation check: if a client's\nsecret is removed from `client_secrets` mid-session, its already-mirrored\nid survives in the session until the session's own TTL expires. Revoking\naccess immediately requires also invalidating the affected sessions.",
         "extends": null,
         "publicProperties": [],
         "publicMethods": [
@@ -1237,7 +1446,7 @@
         "package": "Rasuvaeff\\Mcp",
         "kind": "class",
         "isApi": true,
-        "summary": "Caps the number of tools/call an agent can make in a row \u2014 protection\nagainst an agent burning calls in a loop, not a client quota (that belongs\nto an application-level rate limiter, see RateLimitInterceptor).\n\nWhat \"in a row\" means depends on the protocol era:\n\n- Handshake era: per MCP session (initialize \u2192 TTL expiry), counted in the\n  session itself. Re-initializing starts a fresh counter.\n- Modern era (2026-07-28): there is no session \u2014 the SDK hands every request\n  a throwaway one, so a session counter would start at zero on every call\n  and never run out. The budget is counted per client id instead, in PSR-16,\n  over a fixed window (`floor(now / window)` is part of the key, so a client\n  that keeps calling is still reset when the window turns \u2014 a TTL re-armed\n  on every write would never expire). Without a client id (no\n  SharedSecretMiddleware) every anonymous caller shares ONE budget: the\n  stricter direction, on purpose.\n\nFail-closed: a modern-era call with no cache configured, or a cache backend\nthat throws, is rejected \u2014 a guard must not turn into \"unlimited\" on an\noutage. An exhausted budget is reported as a regular MCP tool-error\nenvelope, so the agent sees the reason instead of a transport failure. A\nfailed call still consumes the budget.\n\nNOT safe against concurrent calls: both counters are a plain\nread-modify-write (`get()` then `set()`) with no compare-and-swap, because\nneither the SDK's SessionInterface nor PSR-16 exposes one. N\nconcurrent requests can overrun the budget by up to N-1 calls. Accepted: the\nguard stops a runaway agent loop; a hard cap under adversarial concurrency\nbelongs in a rate limiter with an atomic store.",
+        "summary": "Caps the number of tools/call an agent can make in a row \u2014 protection\nagainst an agent burning calls in a loop, not a client quota (that belongs\nto an application-level rate limiter, see RateLimitInterceptor).\n\nWhat \"in a row\" means depends on the protocol era:\n\n- Handshake era: per MCP session (initialize \u2192 TTL expiry), counted in the\n  session itself. Re-initializing starts a fresh counter.\n- Modern era (2026-07-28): there is no session \u2014 the SDK hands every request\n  a throwaway one, so a session counter would start at zero on every call\n  and never run out. The budget is counted per client id instead, in PSR-16,\n  over a fixed window (`floor(now / window)` is part of the key, so a client\n  that keeps calling is still reset when the window turns \u2014 a TTL re-armed\n  on every write would never expire). Without a client id (no\n  SharedSecretMiddleware) every anonymous caller shares ONE budget: the\n  stricter direction, on purpose.\n\nFail-closed: a modern-era call with no cache configured, or a cache backend\nthat throws or reports a failed write, is rejected \u2014 a guard must not turn\ninto \"unlimited\" on an outage. An exhausted budget is reported as a regular MCP tool-error\nenvelope, so the agent sees the reason instead of a transport failure. A\nfailed call still consumes the budget.\n\nNOT safe against concurrent calls: both counters are a plain\nread-modify-write (`get()` then `set()`) with no compare-and-swap, because\nneither the SDK's SessionInterface nor PSR-16 exposes one. N\nconcurrent requests can overrun the budget by up to N-1 calls. Accepted: the\nguard stops a runaway agent loop; a hard cap under adversarial concurrency\nbelongs in a rate limiter with an atomic store.",
         "extends": null,
         "publicProperties": [],
         "publicMethods": [
@@ -1428,7 +1637,7 @@
         "package": "Rasuvaeff\\Mcp",
         "kind": "class",
         "isApi": true,
-        "summary": "Prints every registered MCP capability (tools, resources, resource\ntemplates, prompts) without an MCP client: the introspection goes through\nthe same in-process JSON-RPC path a real client uses, so the output shows\nwhat is actually served \u2014 attribute tools, OpenAPI-bridged operations and\nMarkdown prompts alike.\n\n`--json` prints the full capability definitions as normalized JSON (the\nSchemaSnapshot format: sections keyed, items ordered by identity, object\nkeys sorted) \u2014 stable for CI diffs and external automation.",
+        "summary": "Prints every registered MCP capability (tools, resources, resource\ntemplates, prompts) without an MCP client: the introspection goes through\nthe same in-process JSON-RPC path a real client uses, so the output shows\nwhat is actually served \u2014 attribute tools, OpenAPI-bridged operations and\nconfigurator-registered prompts alike.\n\n`--json` prints the full capability definitions as normalized JSON (the\nSchemaSnapshot format: sections keyed, items ordered by identity, object\nkeys sorted) \u2014 stable for CI diffs and external automation.",
         "extends": "Symfony\\Component\\Console\\Command\\Command",
         "publicProperties": [],
         "publicMethods": []
@@ -2101,6 +2310,24 @@
         ]
     },
     {
+        "class": "Rasuvaeff\\Mcp\\OpenApi\\OpenApiConfiguratorResolver",
+        "package": "Rasuvaeff\\Mcp\\OpenApi",
+        "kind": "class",
+        "isApi": true,
+        "summary": "Turns the `openapi` params into the bridge, resolving application services\nonly when a configured feature needs them. Shared by the framework packages:\nthe keys are the same in each of them.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "resolve",
+                "static": false,
+                "params": [],
+                "returnType": "?Rasuvaeff\\Mcp\\OpenApi\\OpenApiServerConfigurator",
+                "summary": "Null while the bridge is disabled: no spec or no operations."
+            }
+        ]
+    },
+    {
         "class": "Rasuvaeff\\Mcp\\OpenApi\\OpenApiServerConfigurator",
         "package": "Rasuvaeff\\Mcp\\OpenApi",
         "kind": "class",
@@ -2609,7 +2836,7 @@
         "package": "Rasuvaeff\\Mcp",
         "kind": "class",
         "isApi": false,
-        "summary": "Body of a `text/event-stream` response: ends PHP's userland output buffers\nright before the SDK's callback stream writes its frames, so each frame's\n`flush()` reaches the SAPI instead of piling up in a buffer.\n\nThe SDK's stateless responder (mcp/sdk 0.8.1, `StatelessResponder::sse()`)\nwrites every frame with `echo` + `flush()` only. `flush()` does not touch\nthe buffer `output_buffering` (4096 in both shipped php.ini files) opens\nbefore the application starts, and `yiisoft/psr-emitter` ends only the\nbuffers opened above the level it recorded \u2014 so a `subscriptions/listen`\nstream reached the client in one piece when it closed. The handshake-era\ntransport calls `ob_flush()` itself and is unaffected; ending the buffers\nfirst is harmless for it.\n\nBuffers are ended down to `$baseLevel` (0 \u2014 all of them \u2014 in production);\na non-removable buffer stops the release.",
+        "summary": "Body of a `text/event-stream` response: ends PHP's userland output buffers\nright before the SDK's callback stream writes its frames, so each frame's\n`flush()` reaches the SAPI instead of piling up in a buffer.\n\nThe SDK's stateless responder (mcp/sdk 0.8.1, `StatelessResponder::sse()`)\nwrites every frame with `echo` + `flush()` only. `flush()` does not touch\nthe buffer `output_buffering` (4096 in both shipped php.ini files) opens\nbefore the application starts, and `yiisoft/psr-emitter` ends only the\nbuffers opened above the level it recorded \u2014 so a `subscriptions/listen`\nstream reached the client in one piece when it closed. The handshake-era\ntransport calls `ob_flush()` itself and is unaffected; ending the buffers\nfirst is harmless for it.\n\nOnly buffers PHP opened itself (`default output handler`) are ended, top\ndown: the release stops at the first buffer with a handler of its own.\nUnder RoadRunner that is the PSR-7 capture, so a stream arrives in one\npiece when it ends (#11).\nBuffers are ended down to `$baseLevel` (0 \u2014 all of them \u2014 in production);\na non-removable buffer stops the release.",
         "extends": null,
         "publicProperties": [],
         "publicMethods": [
@@ -2958,6 +3185,102 @@
                 "summary": ""
             }
         ]
+    },
+    {
+        "class": "Rasuvaeff\\Mcp\\Testing\\AdapterContract",
+        "package": "Rasuvaeff\\Mcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "The behaviour every framework adapter must keep, checked through the\nframework's own HTTP kernel. The application under test serves\nAdapterContractTool behind `SharedSecretMiddleware` with the two\ngiven `client_secrets`, and one kernel instance answers every request: the\nchecks run in one process on purpose.\n\n```php\nforeach ($contract->checks() as $name => $check) {\n    $check(); // throws AdapterContractViolation\n}\n```",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "checks",
+                "static": false,
+                "params": [],
+                "returnType": "array",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\Mcp\\Testing\\AdapterContractDependency",
+        "package": "Rasuvaeff\\Mcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "What AdapterContractTool needs from the container: a concrete class\nnothing binds, so the adapter proves its container autowires tools.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "greeting",
+                "static": false,
+                "params": [
+                    {
+                        "name": "name",
+                        "type": "string",
+                        "description": ""
+                    }
+                ],
+                "returnType": "string",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\Mcp\\Testing\\AdapterContractTool",
+        "package": "Rasuvaeff\\Mcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "The tool class an application under AdapterContract registers.",
+        "extends": null,
+        "publicProperties": [],
+        "publicMethods": [
+            {
+                "name": "greet",
+                "static": false,
+                "params": [
+                    {
+                        "name": "name",
+                        "type": "string",
+                        "description": ""
+                    }
+                ],
+                "returnType": "string",
+                "summary": ""
+            },
+            {
+                "name": "client",
+                "static": false,
+                "params": [
+                    {
+                        "name": "context",
+                        "type": "Mcp\\Server\\RequestContext",
+                        "description": ""
+                    }
+                ],
+                "returnType": "string",
+                "summary": ""
+            },
+            {
+                "name": "fail",
+                "static": false,
+                "params": [],
+                "returnType": "string",
+                "summary": ""
+            }
+        ]
+    },
+    {
+        "class": "Rasuvaeff\\Mcp\\Testing\\AdapterContractViolation",
+        "package": "Rasuvaeff\\Mcp",
+        "kind": "class",
+        "isApi": true,
+        "summary": "A framework adapter does not keep the contract AdapterContract checks.",
+        "extends": "RuntimeException",
+        "publicProperties": [],
+        "publicMethods": []
     },
     {
         "class": "Rasuvaeff\\Mcp\\Testing\\McpErrorException",
