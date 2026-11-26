@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.5 — 2026-11-26
 
 - **Fixed:** under a CLI worker answering through the PSR-7 body — RoadRunner's `PSR7Worker`, used by
   `yiisoft/yii-runner-roadrunner` — a `subscriptions/listen` stream reached the client empty and its frames went
