@@ -213,6 +213,13 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   nested buffers (PHP's own `output_buffering` plus an application or emitter
   buffer) the frame still waits. The wrapper stays until a runtime test under
   PHP-FPM shows the SDK alone delivers frame by frame.
+  It ends ONLY buffers named `default output handler` and stops at the first
+  one with a handler of its own (#11): Swoole (Octane, `runtime/swoole`) and the
+  PSR-7 capture under RoadRunner take the response through such a buffer, and
+  ending it sent the frames to the worker's stdout — under RoadRunner that is
+  the relay, and one listen request killed the worker. Measured stacks: none on
+  FrankenPHP and Rapira, closures on Swoole/RoadRunner, `default output
+  handler` under `output_buffering`. Do not widen the release again.
 - **`Resource\ResourceUpdateNotifier` has two delivery paths, one per era,
   and the SDK joins them nowhere.** The notification bus (SDK 0.8) feeds ONLY
   stateless `subscriptions/listen` streams; handshake sessions still get an

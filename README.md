@@ -163,6 +163,13 @@ the SDK's per-request `AccessToken`), so interleaved requests of one process
 (Fibers, Swoole coroutines) keep their own identity; this is covered by a test on
 bare Fibers.
 
+A `subscriptions/listen` stream is written with `echo` and `flush()` by the SDK. Before it starts,
+the buffers PHP opened itself (`output_buffering`) are ended, so frames leave one by one under
+PHP-FPM; a buffer with a handler of its own stays, because that is how a long-running server takes
+the response. Swoole streams the frames live. Under RoadRunner the PSR-7 capture delivers the
+stream in one piece when it ends. A runner that answers through STDOUT without such a buffer
+(`yiisoft/yii-runner-roadrunner` may be one, not checked) is not supported for listen streams.
+
 ## Security
 
 - The endpoint is trusted-only: put `SharedSecretMiddleware`,
