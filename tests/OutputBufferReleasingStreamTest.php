@@ -7,6 +7,7 @@ namespace Rasuvaeff\Mcp\Tests;
 use Mcp\Server\Transport\CallbackStream;
 use Nyholm\Psr7\Stream;
 use Rasuvaeff\Mcp\OutputBufferReleasingStream;
+use Rasuvaeff\Mcp\Tests\Support\EchoingStream;
 use Testo\Assert;
 use Testo\Codecov\Covers;
 use Testo\Data\DataProvider;
@@ -105,6 +106,15 @@ final class OutputBufferReleasingStreamTest
         }
 
         Assert::same($received, 'frame');
+    }
+
+    public function whatIsCapturedComesBeforeWhatTheReadReturns(): void
+    {
+        $base = ob_get_level();
+        $inner = new EchoingStream(echoed: 'frames|', returned: 'body');
+
+        Assert::same((new OutputBufferReleasingStream($inner, $base, 'cli', roadRunner: true))->getContents(), 'frames|body');
+        Assert::same(ob_get_level(), $base);
     }
 
     public function aReadThatFailsUnderTheCliLeavesNoBufferBehind(): void
