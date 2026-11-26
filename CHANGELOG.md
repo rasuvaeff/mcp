@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed:** under a CLI worker answering through the PSR-7 body — RoadRunner's `PSR7Worker`, used by
+  `yiisoft/yii-runner-roadrunner` — a `subscriptions/listen` stream reached the client empty and its frames went
+  to the RoadRunner log. Under the CLI SAPI, with no buffer left or under RoadRunner (`RR_MODE`), the frames are
+  now captured and returned with the body: the stream arrives in one piece when it ends (#15).
+
 ## 0.1.4 — 2026-11-26
 
 - **Fixed:** a `subscriptions/listen` stream no longer ends an output buffer that belongs to

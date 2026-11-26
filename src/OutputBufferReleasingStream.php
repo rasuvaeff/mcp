@@ -23,7 +23,8 @@ use Psr\Http\Message\StreamInterface;
  * Only buffers PHP opened itself (`default output handler`) are ended, top
  * down: the release stops at the first buffer with a handler of its own.
  * Under RoadRunner that is the PSR-7 capture, so a stream arrives in one
- * piece when it ends (#11).
+ * piece when it ends (#11). Under the CLI SAPI with no buffer left the frames
+ * are captured and returned with the read (#15).
  * Buffers are ended down to `$baseLevel` (0 — all of them — in production);
  * a non-removable buffer stops the release.
  *
@@ -33,17 +34,21 @@ final readonly class OutputBufferReleasingStream implements StreamInterface
 {
     private const string PHP_HANDLER = 'default output handler';
 
+    /**
+     * @param string $sapi PHP_SAPI; a parameter so the CLI case is testable
+     * @param bool|null $roadRunner whether this is a RoadRunner worker; null = the `RR_MODE` variable RoadRunner sets
+     */
     public function __construct(
         private StreamInterface $inner,
         private int $baseLevel = 0,
+        private string $sapi = PHP_SAPI,
+        private ?bool $roadRunner = null,
     ) {}
 
     #[\Override]
     public function __toString(): string
     {
-        $this->release();
-
-        return (string) $this->inner;
+        return $this->deliver(fn(): string => (string) $this->inner);
     }
 
     #[\Override]
@@ -115,23 +120,58 @@ final readonly class OutputBufferReleasingStream implements StreamInterface
     #[\Override]
     public function read(int $length): string
     {
-        $this->release();
-
-        return $this->inner->read($length);
+        return $this->deliver(fn(): string => $this->inner->read($length));
     }
 
     #[\Override]
     public function getContents(): string
     {
-        $this->release();
-
-        return $this->inner->getContents();
+        return $this->deliver(fn(): string => $this->inner->getContents());
     }
 
     #[\Override]
     public function getMetadata(?string $key = null): mixed
     {
         return $this->inner->getMetadata($key);
+    }
+
+    /**
+     * A CLI worker answers through the PSR-7 body: frames echoed there reach
+     * its stdout, not the client. RoadRunner's worker even keeps a buffer of
+     * its own that sends stdout to its log, and a buffer cannot tell where it
+     * forwards. So under the CLI, when no buffer is left or under RoadRunner,
+     * the frames are captured and returned with the read: the stream arrives
+     * whole when it ends (#15). Swoole's buffer is the response and stays live.
+     *
+     * @param \Closure(): string $read
+     */
+    private function deliver(\Closure $read): string
+    {
+        $this->release();
+
+        $capture = $this->sapi === 'cli'
+            && (ob_get_level() === $this->baseLevel || ($this->roadRunner ?? getenv('RR_MODE') !== false));
+
+        if (!$capture) {
+            return $read();
+        }
+
+        // the SDK calls ob_flush() after each frame: a plain buffer would pass
+        // the frames down to RoadRunner's log, this handler keeps them
+        $captured = '';
+        ob_start(static function (string $chunk) use (&$captured): string {
+            $captured .= $chunk;
+
+            return '';
+        });
+
+        try {
+            $result = $read();
+        } finally {
+            ob_end_clean();
+        }
+
+        return $captured . $result;
     }
 
     private function release(): void

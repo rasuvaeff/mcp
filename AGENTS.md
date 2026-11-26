@@ -220,6 +220,11 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   the relay, and one listen request killed the worker. Measured stacks: none on
   FrankenPHP and Rapira, closures on Swoole/RoadRunner, `default output
   handler` under `output_buffering`. Do not widen the release again.
+  Under the CLI SAPI, when no buffer is left or under RoadRunner (`RR_MODE`),
+  the frames are captured by a handler that keeps them and returned with the
+  read (#15): RoadRunner's worker has a buffer of its own that sends stdout to
+  its log, and the SDK's `@ob_flush()` after each frame would push a plain
+  capture buffer down into it. Measured on bare `PSR7Worker`.
 - **`Resource\ResourceUpdateNotifier` has two delivery paths, one per era,
   and the SDK joins them nowhere.** The notification bus (SDK 0.8) feeds ONLY
   stateless `subscriptions/listen` streams; handshake sessions still get an
