@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.4 — 2026-11-26
 
 - **Fixed:** a `subscriptions/listen` stream no longer ends an output buffer that belongs to
   the server. Under RoadRunner it killed the worker, under Swoole the frames were lost; now
