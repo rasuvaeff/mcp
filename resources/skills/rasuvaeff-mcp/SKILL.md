@@ -121,8 +121,9 @@ on 2026-07-28.
 Resource updates: `ResourceUpdateNotifier::notify($uri, ?$context)` publishes
 to the notification bus (a shared one under PHP-FPM, in-memory for one process) for stateless listen streams, and notifies the calling
 handshake session if subscribed. Without a bus stateless subscribers get
-nothing. Listen streams go out live under PHP-FPM, FrankenPHP and Swoole; under RoadRunner they arrive in
-one piece when they end.
+nothing. Listen streams go out live under PHP-FPM, FrankenPHP and Swoole; under RoadRunner, and under any
+other CLI worker with no output buffer left (Laravel Octane, Symfony runtime), they arrive in one
+piece when they end — keep `subscriptionLifetime` short there, a listen stream holds the worker.
 
 `$context->isStateless()` marks the stateless era: never log
 `$context->session` ids or keep state in the session there.
